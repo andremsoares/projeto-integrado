@@ -2,7 +2,7 @@
 
 ## 🍕🐻 Pizzaria Freddy Fazbear - Equipe Launch Code 🐻🍕
 
-### Integrantes
+# Integrantes
 
 André Soares
 ---
