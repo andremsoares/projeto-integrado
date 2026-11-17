@@ -9,6 +9,7 @@ André Soares
 Renan Abreu
 ---
 Henrique Araujo
+---
 
 ***
 
@@ -23,4 +24,5 @@ Linguagem de Marcação (LIMA)
 Lógica de Programação (LOPAL)
 ---
 Sistemas Operacionais (SOP)
+---
 
