@@ -1,14 +1,14 @@
 # Projeto Integrado DS1T
 
-## 🍕🐻 Pizzaria Freddy Fazbear - Equipe Launch Code 🐻🍕
+# 🍕🐻 Pizzaria Freddy Fazbear - Equipe Launch Code 🐻🍕
 
 # Integrantes
 
-André Soares
+### André Soares
 ---
-Renan Abreu
+### Renan Abreu
 ---
-Henrique Araujo
+### Henrique Araujo
 ---
 
 ***
