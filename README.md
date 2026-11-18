@@ -1,6 +1,6 @@
 # Projeto Integrado DS1T
 
-# 🍕🐻 Pizzaria Freddy Fazbear - Equipe Launch Code 🐻🍕
+# ♾️ Infinity Code ♾️ ![Logo da Empresa](Documentos/empresa-logo.png)
 
 # Integrantes
 
