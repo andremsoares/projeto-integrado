@@ -1,8 +1,10 @@
 # Projeto Integrado DS1T
 
-# Infinity Code ![Logo da Empresa](Documentos/empresa-logo.png)
+# Infinity Code 
 ---
 ## Sistema FornoFlow 
+---
+![Logo da Empresa](Documentos/empresa-logo.png)
 
 # Integrantes
 
