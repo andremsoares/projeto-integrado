@@ -4,7 +4,7 @@
 
 ## Sistema FornoFlow 
 
-![Logo da Empresa](Documentos/empresa-logo.png)
+![Logo da Empresa](images/empresa-logo.png)
 
 # Integrantes
 
