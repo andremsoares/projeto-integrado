@@ -1,46 +1,8 @@
 # teste da lógica do sistema ai papai macetei o andré matheus soares guloso
 
 # Login e cadastro
-
 import sqlite3
-import hashlib
-
-def inicializar_banco():
-    conexao = sqlite3.connect("sistema.db")
-    cursor = conexao.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS acesso_gerente (
-            id INTEGER PRIMARY KEY,
-            senha_hash TEXT NOT NULL
-        )
-    """)
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS acesso_cozinha (
-            id INTEGER PRIMARY KEY,
-            senha_hash TEXT NOT NULL
-        )
-    """)
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS acesso_caixa (
-            id INTEGER PRIMARY KEY,
-            senha_hash TEXT NOT NULL
-        )
-    """)
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS acesso_delivery (
-            id INTEGER PRIMARY KEY,
-            senha_hash TEXT NOT NULL
-        )
-    """)
-
-    conexao.commit()
-    conexao.close()
-
-def gerar_hash(senha):
-    return hashlib.sha256(senha.encode("utf-8")).hexdigest()
+from banco import inicializar_banco, gerar_hash
 
 def gerente():
     conexao = sqlite3.connect("sistema.db")
@@ -178,29 +140,30 @@ def delivery():
             print("Bem-vindo(a) ao sistema, funcionário!")
             break
 
-while True:
-    print("1 - Gerente")
-    print("2 - Cozinha")
-    print("3 - Caixa")
-    print("4 - Delivery")
-    print("0 - Sair")
+def menu_autenticacao():
+    while True:
+        print("1 - Gerente")
+        print("2 - Cozinha")
+        print("3 - Caixa")
+        print("4 - Delivery")
+        print("0 - Sair")
 
-    opcao = input("Escolha uma opção: ")
+        opcao = input("Escolha uma opção: ")
 
-    if opcao == "1":
-        inicializar_banco()
-        gerente()
-    elif opcao == "2":
-        inicializar_banco()
-        cozinha()
-    elif opcao == "3":
-        inicializar_banco()
-        caixa()
-    elif opcao == "4":
-        inicializar_banco()
-        delivery()
-    elif opcao == "0":
-        print("Saindo do programa...")
-        break
-    else:
-        print("Opção inválida. Tente novamente.")
+        if opcao == "1":
+            inicializar_banco()
+            gerente()
+        elif opcao == "2":
+            inicializar_banco()
+            cozinha()
+        elif opcao == "3":
+            inicializar_banco()
+            caixa()
+        elif opcao == "4":
+            inicializar_banco()
+            delivery()
+        elif opcao == "0":
+            print("Saindo do programa...")
+            break
+        else:
+            print("Opção inválida. Tente novamente.")
