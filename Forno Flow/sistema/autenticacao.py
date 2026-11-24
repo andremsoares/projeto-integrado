@@ -1,6 +1,7 @@
 import sqlite3
 from banco import inicializar_banco, gerar_hash
 
+
 def gerente():
     conexao = sqlite3.connect("sistema.db")
     cursor = conexao.cursor()

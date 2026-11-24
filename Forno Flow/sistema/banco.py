@@ -51,7 +51,7 @@ def inicializar_banco():
             preco REAL NOT NULL
             estoque INTEGER NOT NULL
             status TEXT NOT NULL
-            CHECK (status IN ('em estoque', 'estoque baixo', 'estoque critico', 'fora de estoque')
+                CHECK (status IN ('em estoque', 'estoque baixo', 'estoque critico', 'fora de estoque')
         )
     """)
 
