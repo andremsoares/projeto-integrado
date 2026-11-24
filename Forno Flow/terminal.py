@@ -18,7 +18,6 @@ def gerente():
             print("Bem-vindo(a) ao sistema, gerente!")
             break
 
-
 def cozinha():
     tentativas = 0
     limite = 5
@@ -51,7 +50,6 @@ def caixa():
         else:
             print("Bem-vindo(a) ao sistema, gerente!")
             break
-    
 
 def delivery():
     tentativas = 0
@@ -69,9 +67,6 @@ def delivery():
         else:
             print("Bem-vindo(a) ao sistema, gerente!")
             break
-    
-    
-
 
 while True:
     print("1 - Gerente")
