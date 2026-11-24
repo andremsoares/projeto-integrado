@@ -1,6 +1,3 @@
-# teste da lógica do sistema ai papai macetei o andré matheus soares guloso
-
-# Login e cadastro
 import sqlite3
 from banco import inicializar_banco, gerar_hash
 
