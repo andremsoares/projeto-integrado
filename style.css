@@ -422,58 +422,139 @@ align-items: center;
   background-color: #5210DB;
   color: white;
   font-size: 13px;
-}
-/* Depoimentos Mobile */
-.depoimentos-mobile {
-  padding: 30px 0;
+  margin-bottom: 17px;
   text-align: center;
 }
+/* Depoimentos Mobile */
+.titulo_avaliacoes {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: auto;
+  width: 100%;
+  gap: 10px;
+  margin-top: 30px;
+}
+.avaliacoes {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #201143;
+  color: #ffffff;
+  font-size: 12px;
+  height: 20px; 
+  width: 125px;
+  border-radius: 25px;
+}
+.titulo_avaliacoes p {
+  font-size: 22px;
+}
 
-.depoimento-card {
+.caixa-avaliacoes {
+  display: flex;
+  flex-direction: column;
+  height: auto;
+  width: 100%;
+  justify-content: center;
+  align-items: center;
+  margin-top: 20px
+}
+
+.avaliacao-card {
   background: #0d071f;
   border: 1px solid #1f1242;
-  padding: 20px;
+  padding-top: 10px;
+  padding-left: 15px;
+  padding-right: 10px;
   border-radius: 14px;
   text-align: left;
   margin-bottom: 15px;
+  height: 100px;
+  width: 250px;
 }
 
-.depoimento-card p {
-  font-size: 13px;
-  margin-bottom: 12px;
+.avaliacao-card p {
+  font-size: 10px;
 }
 
+.logo-perfil {
+  display: flex;
+  width: 22px;
+  height: 22px;
+  background-color: #6912CB;
+  justify-content: center;
+  border-radius: 50%;
+  margin-top: 7px;
+}
+
+.cliente {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+}
+
+.alinhamento-estrela {
+  display: flex;
+  flex-direction: column;
+  margin-left: 10px;
+}
 .autor {
-  font-size: 12px;
-  color: #a855f7;
+  font-size: 8px;
 }
-
+.nota{
+  display: flex;
+  margin-top: 5px;
+}
+.estrela {
+  height: 7px;
+}
+.cliente-1 {
+  margin-top: 20px;
+  display: flex;
+  align-items: center;
+}
 .ver-mais {
-  color: #a855f7;
+  color: #BD4BF6;
   text-decoration: none;
-  font-size: 14px;
+  font-size: 10px;
   display: inline-block;
   margin-top: 10px;
 }
 
-/* CTA Box Mobile */
-.cta-mobile-box {
-  background: linear-gradient(135deg, #2e1065, #120b2e);
+.caixa-final{
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: auto;
+  justify-content: center;
+  align-items: center;
+  margin-top: 20px;
+}
+
+.caixa-roxa {
+  background: linear-gradient(135deg, #200a48, #120b2e);
   border: 1px solid #6d28d9;
-  padding: 25px 20px;
   border-radius: 16px;
-  text-align: center;
-  margin: 30px 0;
+  height: 125px;
+  width: 300px;
+  padding-left: 15px;
+  padding-top: 15px;
+  padding-right: 10px;
 }
 
-.cta-mobile-box h3 {
-  font-size: 20px;
-  margin-bottom: 10px;
+.texto-final {
+  font-size: 17px;
 }
 
-.cta-mobile-box h3 span {
-  color: #a855f7;
+.destaque_3 {
+  font-size: 17px;
+  color: #BD4BF6;
 }
+
+
+
+
 
 .cta-mobile-box p {
   color: #cbd5e1;
