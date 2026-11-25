@@ -3,6 +3,11 @@ from datetime import datetime
 
 horario = datetime.now().strftime("%H:%M")
 
+# garantir com que os pedidos possam ser feitos somente com o que tem no estoque, passando por uma conferência no banco de dados para validar o pedido
+
+def estoque():
+    
+
 def menu_cozinha():
     while True:
         print("1 - Pedidos")
@@ -12,7 +17,7 @@ def menu_cozinha():
         opcao = input("Escolha uma opção: ")
         
         if opcao == "1":
-            print("VocÊ está na aba pedidos")
+            print("Você está na aba pedidos")
         elif opcao == "2":
             print("Você está na aba estoque")
         elif opcao == "0":

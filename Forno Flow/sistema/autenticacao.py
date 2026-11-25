@@ -1,9 +1,8 @@
 import sqlite3
-from banco import gerar_hash
+from banco import conectar, gerar_hash
                
 def autenticar():
-    conexao = sqlite3.connect("sistema.db")
-    conexao.row_factory = sqlite3.Row
+    conexao = conectar()
     cursor = conexao.cursor()
 
     tentativas = 0
