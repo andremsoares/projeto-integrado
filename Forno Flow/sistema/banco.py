@@ -1,6 +1,9 @@
 import sqlite3
 import hashlib
 
+def gerar_hash(senha):
+    return hashlib.sha256(senha.encode("utf-8")).hexdigest()
+
 def inicializar_banco():
     conexao = sqlite3.connect("sistema.db")
     cursor = conexao.cursor()    
@@ -51,6 +54,3 @@ def inicializar_banco():
 
     conexao.commit()
     conexao.close()
-
-def gerar_hash(senha):
-    return hashlib.sha256(senha.encode("utf-8")).hexdigest()
