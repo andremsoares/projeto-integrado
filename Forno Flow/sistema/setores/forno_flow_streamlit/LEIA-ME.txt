@@ -1,0 +1,71 @@
+FORNO FLOW — PRODUTOS E ESTOQUE / STREAMLIT
+
+1. Extraia a pasta forno_flow_streamlit ao lado do banco.py (por exemplo, dentro de sistema/).
+   Não substitua cozinha.py nem banco.py. Mantenha as cinco tabelas existentes.
+
+   sistema/
+       banco.py
+       setores/cozinha.py
+       forno_flow_streamlit/
+           app.py
+           dados.py
+           requirements.txt
+           assets/
+           .streamlit/config.toml
+
+2. No terminal do VS Code, com o ambiente Python do projeto ativado:
+   cd sistema/forno_flow_streamlit
+   python -m pip install -r requirements.txt
+   python -m streamlit run app.py
+
+   Se já estiver dentro de sistema, use apenas cd forno_flow_streamlit.
+   Abra o endereço mostrado no terminal (geralmente http://localhost:8501).
+
+3. A interface usa a função conectar() de banco.py. Se essa função utiliza um
+   caminho relativo para o .db, confirme que aponta para o mesmo arquivo usado
+   pelo sistema no terminal. Você pode definir explicitamente o caminho, sem
+   modificar banco.py. Exemplo PowerShell:
+
+   $env:FORNO_DB = "D:\caminho\do\seu\banco.db"
+   python -m streamlit run app.py
+
+   Substitua pelo caminho real. O programa não cria um banco de demonstração.
+   Se o arquivo ou as tabelas não existirem, será exibido um erro.
+
+ARQUITETURA
+app.py: interface, filtros, tabelas, formulários, gráficos e estilos.
+dados.py: consultas SQL, regras de status, capacidade de produção e gravações.
+assets/: recortes decorativos da imagem de referência enviada.
+
+REGRAS IMPLEMENTADAS
+- Os ingredientes vêm de estoque; os produtos vêm de produtos.
+- A tabela de seis colunas reúne as duas consultas. Ingredientes mostram custo
+  por unidade de medida; produtos mostram preço de venda.
+- O status dos ingredientes conserva a fórmula mínimo–ideal do projeto.
+- Para produtos, capacidade = menor número inteiro de unidades produzíveis
+  entre todos os ingredientes cadastrados na receita. Receita ausente ou dados
+  insuficientes: Não informado. Estoque comprovadamente insuficiente: zero.
+- A receita deve estar completa e as quantidades devem usar a mesma unidade
+  do ingrediente. O banco não tem um campo que confirme a completude da receita;
+  a interface calcula com base em tudo que foi cadastrado nela até o momento.
+- Produtos não têm limites mínimo/ideal próprios: o status proposto é o pior
+  alerta dos ingredientes da receita, salvo capacidade zero ou dados ausentes.
+- Quantidades de produtos são capacidades individuais, não estoques independentes.
+- Gráfico de estoque e contadores de alerta incluem apenas ingredientes físicos.
+- Gráfico de vendas soma quantidade; receita soma valor_total (sem adicionar
+  taxa_entrega separadamente). Considere a lista VENDAS em dados.py e ajuste
+  quando o setor de pedidos definir os status de vendas confirmadas.
+- Comparação de hoje e ontem só usa data_hora reconhecível pelo SQLite (ISO).
+  Não são estimadas variações históricas do estoque ou de produtos cadastrados.
+- Os formulários escrevem no SQLite, com commit/rollback, respeitando as
+  restrições atuais das tabelas. Campos numéricos obrigatórios não são
+  preenchidos automaticamente com dados fictícios. Cadastro sem preço ou
+  quantidade exige alteração do esquema e da regra de movimentação.
+- Receitas podem ser cadastradas depois dos produtos; nenhuma linha de teste
+  é inserida automaticamente. O botão de movimentação registra entradas e perdas.
+- Pedidos/delivery/relatórios/configurações/início são itens visuais de navegação,
+  ainda não implementados. O desconto automático por venda pertence ao futuro
+  módulo de pedidos, não a esta página.
+
+Validação: sintaxe Python e camada SQLite verificadas com banco temporário.
+A execução visual depende de instalar Streamlit no ambiente do projeto.
