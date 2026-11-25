@@ -1,53 +1,53 @@
-javascript:
 document.addEventListener('DOMContentLoaded', () => {
   /* ========================================================================
      1. MENU MOBILE INTERATIVO (HAMBÚRGUER + TOUCH)
      ======================================================================== */
-  const menuToggle = document.getElementById('menuToggle');
-  const navMenu = document.getElementById('navMenu');
-  const navLinks = navMenu ? navMenu.querySelectorAll('a') : [];
+  const botaoMenuMobile = document.getElementById('botao-menu-mobile');
+  const menuNavegacao = document.getElementById('menu-navegacao');
+  const linksNavegacao = menuNavegacao ? menuNavegacao.querySelectorAll('a') : [];
 
-  function abrirFecharMenu(forcarEstado) {
-    if (!navMenu || !menuToggle) return;
-    const deveAbrir = typeof forcarEstado === 'boolean'
-      ? forcarEstado
-      : !navMenu.classList.contains('aberto');
+  function alternarMenuMobile(forcarAbertura) {
+    if (!menuNavegacao || !botaoMenuMobile) return;
 
-    navMenu.classList.toggle('aberto', deveAbrir);
-    menuToggle.setAttribute('aria-expanded', String(deveAbrir));
+    const deveAbrirMenu = typeof forcarAbertura === 'boolean'
+      ? forcarAbertura
+      : !menuNavegacao.classList.contains('menu-aberto');
+
+    menuNavegacao.classList.toggle('menu-aberto', deveAbrirMenu);
+    botaoMenuMobile.setAttribute('aria-expanded', String(deveAbrirMenu));
   }
 
-  if (menuToggle && navMenu) {
-    menuToggle.addEventListener('click', (e) => {
-      e.stopPropagation();
-      abrirFecharMenu();
+  if (botaoMenuMobile && menuNavegacao) {
+    botaoMenuMobile.addEventListener('click', (evento) => {
+      evento.stopPropagation();
+      alternarMenuMobile();
     });
 
-    // Fecha ao tocar ou clicar fora do menu
-    document.addEventListener('click', (e) => {
+    // Fecha o menu ao tocar ou clicar fora dele
+    document.addEventListener('click', (evento) => {
       if (
-        navMenu.classList.contains('aberto') &&
-        !navMenu.contains(e.target) &&
-        !menuToggle.contains(e.target)
+        menuNavegacao.classList.contains('menu-aberto') &&
+        !menuNavegacao.contains(evento.target) &&
+        !botaoMenuMobile.contains(evento.target)
       ) {
-        abrirFecharMenu(false);
+        alternarMenuMobile(false);
       }
     });
 
-    document.addEventListener('touchstart', (e) => {
+    document.addEventListener('touchstart', (evento) => {
       if (
-        navMenu.classList.contains('aberto') &&
-        !navMenu.contains(e.target) &&
-        !menuToggle.contains(e.target)
+        menuNavegacao.classList.contains('menu-aberto') &&
+        !menuNavegacao.contains(evento.target) &&
+        !botaoMenuMobile.contains(evento.target)
       ) {
-        abrirFecharMenu(false);
+        alternarMenuMobile(false);
       }
     }, { passive: true });
 
     // Fecha o menu suavemente ao selecionar qualquer opção
-    navLinks.forEach((link) => {
-      link.addEventListener('click', () => {
-        abrirFecharMenu(false);
+    linksNavegacao.forEach((linkNavegacao) => {
+      linkNavegacao.addEventListener('click', () => {
+        alternarMenuMobile(false);
       });
     });
   }
@@ -55,112 +55,112 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ========================================================================
      2. CARROSSEL INTERATIVO COM TOUCH (SWIPE) E BOTÕES (< e >)
      ======================================================================== */
-  const carouselViewport = document.getElementById('carouselViewport');
-  const carouselTrack = document.getElementById('carouselTrack');
-  const btnPrev = document.getElementById('btnPrev');
-  const btnNext = document.getElementById('btnNext');
+  const janelaCarrossel = document.getElementById('janela-carrossel');
+  const trilhaCards = document.getElementById('trilha-cards-diferenciais');
+  const botaoAnterior = document.getElementById('botao-carrossel-anterior');
+  const botaoProximo = document.getElementById('botao-carrossel-proximo');
 
-  if (carouselViewport && carouselTrack && btnPrev && btnNext) {
-    const cards = Array.from(carouselTrack.querySelectorAll('.card'));
-    let currentIndex = 0;
-    let startX = 0;
-    let startY = 0;
-    let currentDeltaX = 0;
-    let isDragging = false;
+  if (janelaCarrossel && trilhaCards && botaoAnterior && botaoProximo) {
+    const listaCards = Array.from(trilhaCards.querySelectorAll('.card-diferencial'));
+    let indiceAtual = 0;
+    let posicaoInicialX = 0;
+    let posicaoInicialY = 0;
+    let deslocamentoAtualX = 0;
+    let estaArrastando = false;
 
-    function isTabletCarouselActive() {
-  const width = window.innerWidth;
-  return width >= 600 && width <= 820;
-}
-
-    function getStepWidth() {
-      if (cards.length === 0) return 0;
-      const cardWidth = cards[0].getBoundingClientRect().width;
-      const gap = parseFloat(getComputedStyle(carouselTrack).gap) || 16;
-      return cardWidth + gap;
+    function carrosselTabletEstaAtivo() {
+      const larguraTela = window.innerWidth;
+      return larguraTela >= 600 && larguraTela <= 820;
     }
 
-    function getMaxIndex() {
-      const visibleCards = 2;
-      return Math.max(0, cards.length - visibleCards);
+    function calcularLarguraDeslocamento() {
+      if (listaCards.length === 0) return 0;
+      const larguraCard = listaCards[0].getBoundingClientRect().width;
+      const espacamentoCards = parseFloat(getComputedStyle(trilhaCards).gap) || 16;
+      return larguraCard + espacamentoCards;
     }
 
-    function updateCarousel(animate = true) {
-      if (!isTabletCarouselActive()) {
-        carouselTrack.style.transform = '';
-        carouselTrack.style.transition = '';
+    function calcularIndiceMaximo() {
+      const quantidadeCardsVisiveis = 2;
+      return Math.max(0, listaCards.length - quantidadeCardsVisiveis);
+    }
+
+    function atualizarPosicaoCarrossel(animar = true) {
+      if (!carrosselTabletEstaAtivo()) {
+        trilhaCards.style.transform = '';
+        trilhaCards.style.transition = '';
         return;
       }
 
-      carouselTrack.style.transition = animate
+      trilhaCards.style.transition = animar
         ? 'transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1)'
         : 'none';
 
-      const offset = currentIndex * getStepWidth();
-      carouselTrack.style.transform = `translate3d(-${offset}px, 0, 0)`;
+      const deslocamentoPixels = indiceAtual * calcularLarguraDeslocamento();
+      trilhaCards.style.transform = `translate3d(-${deslocamentoPixels}px, 0, 0)`;
     }
 
-    function goNext() {
-      const maxIndex = getMaxIndex();
-      currentIndex = currentIndex >= maxIndex ? 0 : currentIndex + 1;
-      updateCarousel(true);
+    function avancarCard() {
+      const indiceMaximo = calcularIndiceMaximo();
+      indiceAtual = indiceAtual >= indiceMaximo ? 0 : indiceAtual + 1;
+      atualizarPosicaoCarrossel(true);
     }
 
-    function goPrev() {
-      const maxIndex = getMaxIndex();
-      currentIndex = currentIndex <= 0 ? maxIndex : currentIndex - 1;
-      updateCarousel(true);
+    function voltarCard() {
+      const indiceMaximo = calcularIndiceMaximo();
+      indiceAtual = indiceAtual <= 0 ? indiceMaximo : indiceAtual - 1;
+      atualizarPosicaoCarrossel(true);
     }
 
-    btnNext.addEventListener('click', goNext);
-    btnPrev.addEventListener('click', goPrev);
+    botaoProximo.addEventListener('click', avancarCard);
+    botaoAnterior.addEventListener('click', voltarCard);
 
     // Eventos Touch (Swipe natural com o dedo)
-    carouselViewport.addEventListener('touchstart', (e) => {
-      if (!isTabletCarouselActive() || e.touches.length !== 1) return;
-      startX = e.touches[0].clientX;
-      startY = e.touches[0].clientY;
-      currentDeltaX = 0;
-      isDragging = true;
-      carouselTrack.style.transition = 'none';
+    janelaCarrossel.addEventListener('touchstart', (evento) => {
+      if (!carrosselTabletEstaAtivo() || evento.touches.length !== 1) return;
+      posicaoInicialX = evento.touches[0].clientX;
+      posicaoInicialY = evento.touches[0].clientY;
+      deslocamentoAtualX = 0;
+      estaArrastando = true;
+      trilhaCards.style.transition = 'none';
     }, { passive: true });
 
-    carouselViewport.addEventListener('touchmove', (e) => {
-      if (!isDragging || !isTabletCarouselActive()) return;
-      const touchX = e.touches[0].clientX;
-      const touchY = e.touches[0].clientY;
-      const diffX = touchX - startX;
-      const diffY = touchY - startY;
+    janelaCarrossel.addEventListener('touchmove', (evento) => {
+      if (!estaArrastando || !carrosselTabletEstaAtivo()) return;
+      const toqueAtualX = evento.touches[0].clientX;
+      const toqueAtualY = evento.touches[0].clientY;
+      const diferencaX = toqueAtualX - posicaoInicialX;
+      const diferencaY = toqueAtualY - posicaoInicialY;
 
       // Só arrasta horizontalmente se o movimento for predominantemente horizontal
-      if (Math.abs(diffX) > Math.abs(diffY)) {
-        currentDeltaX = diffX;
-        const baseOffset = currentIndex * getStepWidth();
-        const dragOffset = baseOffset - currentDeltaX * 0.45;
-        carouselTrack.style.transform = `translate3d(-${dragOffset}px, 0, 0)`;
+      if (Math.abs(diferencaX) > Math.abs(diferencaY)) {
+        deslocamentoAtualX = diferencaX;
+        const deslocamentoBase = indiceAtual * calcularLarguraDeslocamento();
+        const deslocamentoArrasto = deslocamentoBase - deslocamentoAtualX * 0.45;
+        trilhaCards.style.transform = `translate3d(-${deslocamentoArrasto}px, 0, 0)`;
       }
     }, { passive: true });
 
-    carouselViewport.addEventListener('touchend', () => {
-      if (!isDragging || !isTabletCarouselActive()) return;
-      isDragging = false;
+    janelaCarrossel.addEventListener('touchend', () => {
+      if (!estaArrastando || !carrosselTabletEstaAtivo()) return;
+      estaArrastando = false;
 
-      const swipeThreshold = 40; // Sensibilidade do toque em pixels
-      if (currentDeltaX < -swipeThreshold) {
-        goNext();
-      } else if (currentDeltaX > swipeThreshold) {
-        goPrev();
+      const limiteMinimoDeslize = 40;
+      if (deslocamentoAtualX < -limiteMinimoDeslize) {
+        avancarCard();
+      } else if (deslocamentoAtualX > limiteMinimoDeslize) {
+        voltarCard();
       } else {
-        updateCarousel(true);
+        atualizarPosicaoCarrossel(true);
       }
-      currentDeltaX = 0;
+      deslocamentoAtualX = 0;
     });
 
     window.addEventListener('resize', () => {
-      currentIndex = Math.min(currentIndex, getMaxIndex());
-      updateCarousel(false);
+      indiceAtual = Math.min(indiceAtual, calcularIndiceMaximo());
+      atualizarPosicaoCarrossel(false);
     });
 
-    updateCarousel(false);
+    atualizarPosicaoCarrossel(false);
   }
 });
