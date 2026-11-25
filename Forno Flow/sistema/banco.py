@@ -43,7 +43,7 @@ def inicializar_banco():
         CREATE TABLE IF NOT EXISTS estoque (
             id INTEGER PRIMARY KEY,
             ingrediente TEXT NOT NULL UNIQUE,
-            unidade TEXT NOT NULL,
+            unidade TEXT NOT NULL CHECK (unidade IN ('g', 'ml', 'un', 'l', 'kg')),
             quantidade REAL NOT NULL CHECK (quantidade >= 0),
             custo_unitario REAL NOT NULL CHECK (custo_unitario >= 0),
             estoque_minimo REAL NOT NULL DEFAULT 0 CHECK (estoque_minimo >= 0),
@@ -99,7 +99,7 @@ def inicializar_banco():
         CREATE TABLE IF NOT EXISTS movimentacoes_estoque (
             id INTEGER PRIMARY KEY,
             ingrediente_id INTEGER NOT NULL,
-            tipo TEXT NOT NULL,
+            tipo TEXT NOT NULL CHECK (tipo IN ('entrada', 'saida_venda', 'perda', 'ajuste')),
             quantidade REAL NOT NULL CHECK (quantidade > 0),
             custo_total REAL NOT NULL CHECK (custo_total >= 0),
             data_hora TEXT NOT NULL,

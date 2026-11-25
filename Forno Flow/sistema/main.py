@@ -1,5 +1,6 @@
 from autenticacao import autenticar
 from banco import inicializar_banco
+from setores.cozinha import menu_cozinha
 import sys
 
 print("Bem-vindo(a) ao sistema de gerenciamento do Forno Flow!")
@@ -19,7 +20,7 @@ match tipo:
     case 1:
         print("Gerente")
     case 2:
-        print("Cozinha")
+        menu_cozinha()
     case 3:
         print("Financeiro")
     case 4:
