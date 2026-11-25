@@ -1,19 +1,7 @@
 import sqlite3
-from banco import inicializar_banco
 from datetime import datetime
 
 horario = datetime.now().strftime("%H:%M")
-
-def cadastrar_pedido():
-    
-
-def pedidos():
-    
-
-
-
-def estoque():
-    
 
 def menu_cozinha():
     while True:
@@ -24,9 +12,9 @@ def menu_cozinha():
         opcao = input("Escolha uma opção: ")
         
         if opcao == "1":
-            pedidos()
+            print("VocÊ está na aba pedidos")
         elif opcao == "2":
-            estoque()
+            print("Você está na aba estoque")
         elif opcao == "0":
             break
         else:
