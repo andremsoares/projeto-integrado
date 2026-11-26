@@ -48,9 +48,15 @@ def inicializar_banco():
             custo_unitario REAL NOT NULL CHECK (custo_unitario >= 0),
             estoque_minimo REAL NOT NULL DEFAULT 0 CHECK (estoque_minimo >= 0),
             estoque_ideal REAL NOT NULL CHECK (estoque_ideal > 0),
+            ativo INTEGER NOT NULL DEFAULT 1 CHECK (ativo IN (0, 1)),
             CHECK (estoque_ideal >= estoque_minimo)
         )
     """)
+
+    try:
+        cursor.execute("ALTER TABLE estoque ADD COLUMN ativo INTEGER NOT NULL DEFAULT 1 CHECK (ativo IN (0, 1))")
+    except sqlite3.OperationalError:
+        pass
 
     # 2. Tabela de Produtos (cardápio vendido ao cliente)
     cursor.execute("""

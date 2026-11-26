@@ -71,7 +71,7 @@ def calcular_status_estoque(quantidade, estoque_minimo, estoque_ideal):
 
 # consulta o estoque
 
-def consultar_estoque(nome, prioridade):
+def consultar_estoque(nome="", prioridade=""):
     conexao = conectar()
     try:
         cursor = conexao.cursor()
@@ -92,6 +92,8 @@ def consultar_estoque(nome, prioridade):
         print("Nenhum item cadastrado.")
         return
 
+    encontrados = 0  # NOVO
+
     for registro in ingredientes:
         id_ingrediente = registro["id"]
         ingrediente = registro["ingrediente"]
@@ -101,15 +103,14 @@ def consultar_estoque(nome, prioridade):
         estoque_minimo = registro["estoque_minimo"]
         estoque_ideal = registro["estoque_ideal"]
 
-        codigo = f"#ING{id_ingrediente:03d}"
-        preco = f"R$ {custo_unitario:.2f}"
-        estoque_atual = f"{quantidade:g} {unidade}"
-        status = calcular_status_estoque(quantidade, estoque_minimo, estoque_ideal)
+        # NOVO: filtro por nome
+        if nome and nome not in ingrediente.lower():
+            continue
 
+        codigo = f"#ING{id_ingrediente:03d}"
 
         if custo_unitario is None:
             preco = "Não informado"
-
         else:
             preco = f"R$ {custo_unitario:.2f}"
 
@@ -120,9 +121,21 @@ def consultar_estoque(nome, prioridade):
         else:
             estoque_atual = f"{quantidade:g} {unidade}"
 
-        print(f"{codigo.capitalize()} | {ingrediente.capitalize()} | {preco.capitalize()} | {estoque_atual.capitalize()} | {status.capitalize()}")
+        status = calcular_status_estoque(quantidade, estoque_minimo, estoque_ideal)
 
-#busca por prioridade
+        # NOVO: filtro por status
+        if prioridade and prioridade not in status.lower():
+            continue
+
+        print(f"{codigo} | {ingrediente.capitalize()} | {preco} | {estoque_atual} | {status}")
+
+        encontrados += 1  # NOVO
+
+    # NOVO: caso nenhum ingrediente passe pelos filtros
+    if encontrados == 0:
+        print("Nenhum ingrediente corresponde aos filtros.")
+
+# busca por prioridade
 
 def prioridade_estoque():
     print("\n--- PESQUISAR ESTOQUE ---")
@@ -131,6 +144,7 @@ def prioridade_estoque():
     nome = input("Nome do ingrediente: ").strip().lower()
     prioridade = input("Status do estoque: ").strip().lower()
 
+    consultar_estoque(nome, prioridade)
 
 # modificar estoque
 
@@ -147,7 +161,7 @@ def editar_estoque():
             return
 
         for item in itens:
-            print(f"{item['id']} - {item['ingrediente']} ({item['quantidade']:g} {item['unidade']})")
+            print(f"{item['id'].capitalize()} - {item['ingrediente'].capitalize()} ({item['quantidade'].capitalize():g} {item['unidade'].capitalize()})")
 
         id_ingrediente = int(input("\nDigite o ID do ingrediente que deseja editar: ").strip())
 
@@ -216,12 +230,262 @@ def editar_estoque():
     finally:
         conexao.close()
 
+# registrar compra
+
+def registrar_compra():
+    print("\n--- REGISTRAR COMPRA / REPOSIÇÃO ---")
+    conexao = conectar()
+    try:
+        cursor = conexao.cursor()
+
+        cursor.execute("""
+            SELECT id, ingrediente, quantidade, unidade, custo_unitario
+            FROM estoque
+            ORDER BY ingrediente ASC
+        """)
+        itens = cursor.fetchall()
+
+        if not itens:
+            print("Nenhum ingrediente cadastrado. Cadastre o item antes de registrar uma compra.")
+            return
+
+        for item in itens:
+            print(f"{item['id'].capitalize()} - {item['ingrediente'].capitalize()} (Atual: {item['quantidade'].capitalize():g} {item['unidade'].capitalize()} | Custo: R$ {item['custo_unitario']:.2f})")
+
+        id_ingrediente = int(input("\nDigite o ID do ingrediente comprado: ").strip())
+
+        cursor.execute("""
+            SELECT id, ingrediente, unidade, quantidade,
+                   custo_unitario, estoque_minimo, estoque_ideal
+            FROM estoque
+            WHERE id = ?
+        """, (id_ingrediente,))
+        registro = cursor.fetchone()
+
+        if not registro:
+            print("Ingrediente não encontrado.")
+            return
+
+        quantidade_comprada = float(input(f"Quantidade comprada (em {registro['unidade']}): ").replace(",", "."))
+
+        if quantidade_comprada <= 0:
+            print("Erro: a quantidade comprada deve ser maior que zero.")
+            return
+
+        entrada_custo = input(f"Novo custo unitário [ENTER para manter R$ {registro['custo_unitario']:.2f}]: ").strip()
+        novo_custo = float(entrada_custo.replace(",", ".")) if entrada_custo else registro["custo_unitario"]
+
+        nova_quantidade_total = registro["quantidade"] + quantidade_comprada
+        custo_total_compra = round(quantidade_comprada * novo_custo, 2)
+        agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        cursor.execute("""
+            UPDATE estoque
+            SET quantidade = ?,
+                custo_unitario = ?
+            WHERE id = ?
+        """, (nova_quantidade_total, novo_custo, id_ingrediente))
+
+        cursor.execute("""
+            INSERT INTO movimentacoes_estoque (ingrediente_id, tipo, quantidade, custo_total, data_hora)
+            VALUES (?, 'entrada', ?, ?, ?)
+        """, (id_ingrediente, quantidade_comprada, custo_total_compra, agora))
+
+        conexao.commit()
+
+        novo_status = calcular_status_estoque(
+            nova_quantidade_total,
+            registro["estoque_minimo"],
+            registro["estoque_ideal"]
+        )
+        print(f"\nCompra de '{registro['ingrediente']}' registrada com sucesso! (Total gasto: R$ {custo_total_compra:.2f})")
+        print(f"Novo saldo: {nova_quantidade_total:g} {registro['unidade']} | Status: {novo_status}")
+
+    except ValueError:
+        conexao.rollback()
+        print("Erro: digite apenas números válidos para ID, quantidade e valores.")
+    except sqlite3.IntegrityError as erro:
+        conexao.rollback()
+        print(f"Erro ao registrar compra no banco: {erro}")
+    finally:
+        conexao.close()
+
+# registrar perda
+
+def registrar_perda():
+    print("\n--- REGISTRAR PERDA / DESPERDÍCIO ---")
+    conexao = conectar()
+    try:
+        cursor = conexao.cursor()
+
+        cursor.execute("""
+            SELECT id, ingrediente, quantidade, unidade, custo_unitario
+            FROM estoque
+            ORDER BY ingrediente ASC
+        """)
+        itens = cursor.fetchall()
+
+        if not itens:
+            print("Nenhum ingrediente cadastrado no estoque.")
+            return
+
+        for item in itens:
+            print(f"{item['id'].capitalize()} - {item['ingrediente'].capitalize()} (Atual: {item['quantidade'].capitalize():g} {item['unidade'].capitalize()} | Custo: R$ {item['custo_unitario']:.2f})")
+
+        id_ingrediente = int(input("\nDigite o ID do ingrediente perdido: ").strip())
+
+        cursor.execute("""
+            SELECT id, ingrediente, unidade, quantidade,
+                   custo_unitario, estoque_minimo, estoque_ideal
+            FROM estoque
+            WHERE id = ?
+        """, (id_ingrediente,))
+        registro = cursor.fetchone()
+
+        if not registro:
+            print("Ingrediente não encontrado.")
+            return
+
+        if registro["quantidade"] == 0:
+            print(f"O ingrediente '{registro['ingrediente']}' já está com saldo zerado.")
+            return
+
+        quantidade_perdida = float(input(f"Quantidade perdida (em {registro['unidade']}): ").replace(",", "."))
+
+        if quantidade_perdida <= 0:
+            print("Erro: a quantidade perdida deve ser maior que zero.")
+            return
+
+        if quantidade_perdida > registro["quantidade"]:
+            print(f"Erro: quantidade perdida ({quantidade_perdida:g} {registro['unidade']}) maior que o saldo atual ({registro['quantidade']:g} {registro['unidade']}).")
+            return
+
+        nova_quantidade_total = registro["quantidade"] - quantidade_perdida
+        custo_total_perda = round(quantidade_perdida * registro["custo_unitario"], 2)
+        agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        cursor.execute("""
+            UPDATE estoque
+            SET quantidade = ?
+            WHERE id = ?
+        """, (nova_quantidade_total, id_ingrediente))
+
+        cursor.execute("""
+            INSERT INTO movimentacoes_estoque (ingrediente_id, tipo, quantidade, custo_total, data_hora)
+            VALUES (?, 'perda', ?, ?, ?)
+        """, (id_ingrediente, quantidade_perdida, custo_total_perda, agora))
+
+        conexao.commit()
+
+        novo_status = calcular_status_estoque(
+            nova_qtd_total,
+            registro["estoque_minimo"],
+            registro["estoque_ideal"]
+        )
+        print(f"\nPerda de '{registro['ingrediente']}' registrada com sucesso! (Prejuízo: R$ {custo_total_perda:.2f})")
+        print(f"Novo saldo: {nova_quantidade_total:g} {registro['unidade']} | Status: {novo_status}")
+
+    except ValueError:
+        conexao.rollback()
+        print("Erro: digite apenas números válidos para ID e quantidade.")
+    except sqlite3.IntegrityError as erro:
+        conexao.rollback()
+        print(f"Erro ao registrar perda no banco: {erro}")
+    finally:
+        conexao.close()
+
+# histórico de movimentações
+
+def consultar_movimentacoes():
+    print("\n--- HISTÓRICO DE MOVIMENTAÇÕES ---")
+    print("1 - Todas as movimentações")
+    print("2 - Filtrar por tipo (entrada, venda, perda, ajuste)")
+    print("3 - Filtrar por ingrediente")
+    filtro = input("Escolha uma opção [ENTER para todas]: ").strip()
+
+    conexao = conectar()
+    try:
+        cursor = conexao.cursor()
+
+        query_base = """
+            SELECT 
+                m.id,
+                m.data_hora,
+                e.ingrediente,
+                e.unidade,
+                m.tipo,
+                m.quantidade,
+                m.custo_total
+            FROM movimentacoes_estoque m
+            INNER JOIN estoque e ON m.ingrediente_id = e.id
+        """
+
+        if filtro == "2":
+            print("\nTipos disponíveis: entrada | saida_venda | perda | ajuste")
+            tipo_escolhido = input("Digite o tipo desejado: ").strip().lower()
+            cursor.execute(
+                query_base + " WHERE m.tipo = ? ORDER BY m.data_hora DESC, m.id DESC",
+                (tipo_escolhido,)
+            )
+        elif filtro == "3":
+            cursor.execute("SELECT id, ingrediente FROM estoque ORDER BY ingrediente ASC")
+            itens = cursor.fetchall()
+
+            if not itens:
+                print("Nenhum ingrediente cadastrado.")
+                return
+
+            for item in itens:
+                print(f"{item['id']} - {item['ingrediente']}")
+
+            id_ingrediente = int(input("\nDigite o ID do ingrediente: ").strip())
+            cursor.execute(
+                query_base + " WHERE m.ingrediente_id = ? ORDER BY m.data_hora DESC, m.id DESC",
+                (id_ingrediente,)
+            )
+        else:
+            cursor.execute(query_base + " ORDER BY m.data_hora DESC, m.id DESC")
+
+        movimentacoes = cursor.fetchall()
+
+    except ValueError:
+        print("Erro: digite apenas números válidos para o ID.")
+        return
+    finally:
+        conexao.close()
+
+    print("\n========== EXTRATO DO ESTOQUE ==========")
+    print("ID | Data/Hora | Ingrediente | Tipo | Quantidade | Valor Total")
+
+    if not movimentacoes:
+        print("Nenhuma movimentação encontrada.")
+        return
+
+    nomes_tipos = {
+        "entrada": "Entrada",
+        "saida_venda": "Saída (Venda)",
+        "perda": "Perda",
+        "ajuste": "Ajuste"
+    }
+
+    for mov in movimentacoes:
+        codigo = f"#MOV{mov['id']:03d}"
+        tipo_formatado = nomes_tipos.get(mov["tipo"], mov["tipo"])
+        quantidade_formatada = f"{mov['quantidade']:g} {mov['unidade']}"
+        valor_formatado = f"R$ {mov['custo_total']:.2f}"
+
+        print(f"{codigo} | {mov['data_hora']} | {mov['ingrediente']} | {tipo_formatado} | {quantidade_formatada} | {valor_formatado}")
+
 def menu_estoque():
     while True:
         print("\nVocê está na aba estoque!")
         print("1 - Cadastrar ingrediente")
         print("2 - Consultar estoque")
-        print("3 - Editar estoque")
+        print("3 - Consulta por prioridade")
+        print("4 - Editar estoque")
+        print("5 - Registrar compra")
+        print("6 - Registrar perda")
+        print("7 - Consultar movimentações")
         print("0 - Voltar para a aba cozinha")
         opcao = input("Escolha sua opção: ").strip()
 
@@ -230,7 +494,15 @@ def menu_estoque():
         elif opcao == "2":
             consultar_estoque()
         elif opcao == "3":
+            prioridade_estoque()
+        elif opcao == "4":
             editar_estoque()
+        elif opcao == "5":
+            registrar_compra()
+        elif opcao == "6":
+            registrar_perda()
+        elif opcao == "7":
+            consultar_movimentacoes()
         elif opcao == "0":
             print("Saindo da aba estoque...")
             break
