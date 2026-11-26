@@ -1,7 +1,8 @@
+import sys
+sys.dont_write_bytecode = True
 from autenticacao import autenticar
 from banco import inicializar_banco
 from setores.cozinha import menu_cozinha
-import sys
 
 print("Bem-vindo(a) ao sistema de gerenciamento do Forno Flow!")
 input("Pressione ENTER para continuar...")

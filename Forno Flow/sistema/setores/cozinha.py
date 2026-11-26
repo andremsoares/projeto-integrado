@@ -13,6 +13,7 @@ def menu_cozinha():
         elif opcao == "2":
             menu_estoque()
         elif opcao == "0":
+            print("Saindo do sistema...")
             break
         else:
             print("Opção inválida. Tente novamente.")

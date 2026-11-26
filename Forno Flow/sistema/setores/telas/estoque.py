@@ -71,7 +71,7 @@ def calcular_status_estoque(quantidade, estoque_minimo, estoque_ideal):
 
 # consulta o estoque
 
-def consultar_estoque():
+def consultar_estoque(nome, prioridade):
     conexao = conectar()
     try:
         cursor = conexao.cursor()
@@ -122,11 +122,106 @@ def consultar_estoque():
 
         print(f"{codigo.capitalize()} | {ingrediente.capitalize()} | {preco.capitalize()} | {estoque_atual.capitalize()} | {status.capitalize()}")
 
+#busca por prioridade
+
+def prioridade_estoque():
+    print("\n--- PESQUISAR ESTOQUE ---")
+    print("Pressione ENTER para ignorar um filtro.")
+
+    nome = input("Nome do ingrediente: ").strip().lower()
+    prioridade = input("Status do estoque: ").strip().lower()
+
+
+# modificar estoque
+
+def editar_estoque():
+    print("\n--- EDITAR INGREDIENTE ---")
+    conexao = conectar()
+    try:
+        cursor = conexao.cursor()
+        cursor.execute("SELECT id, ingrediente, quantidade, unidade FROM estoque ORDER BY id ASC")
+        itens = cursor.fetchall()
+
+        if not itens:
+            print("Nenhum ingrediente cadastrado para editar.")
+            return
+
+        for item in itens:
+            print(f"{item['id']} - {item['ingrediente']} ({item['quantidade']:g} {item['unidade']})")
+
+        id_ingrediente = int(input("\nDigite o ID do ingrediente que deseja editar: ").strip())
+
+        cursor.execute("""
+            SELECT id, ingrediente, unidade, quantidade,
+                   custo_unitario, estoque_minimo, estoque_ideal
+            FROM estoque
+            WHERE id = ?
+        """, (id_ingrediente,))
+        registro = cursor.fetchone()
+
+        if not registro:
+            print("Ingrediente não encontrado.")
+            return
+
+        print("\nPressione ENTER para manter o valor atual.")
+
+        novo_nome = input(f"Nome [{registro['ingrediente']}]: ").strip() or registro["ingrediente"]
+        nova_unidade = input(f"Unidade (g, ml, un, l, kg) [{registro['unidade']}]: ").strip().lower() or registro["unidade"]
+
+        entrada_quantidade = input(f"Quantidade [{registro['quantidade']:g}]: ").strip()
+        nova_quantidade = float(entrada_quantidade.replace(",", ".")) if entrada_quantidade else registro["quantidade"]
+
+        entrada_custo = input(f"Custo unitário [R$ {registro['custo_unitario']:.2f}]: ").strip()
+        novo_custo = float(entrada_custo.replace(",", ".")) if entrada_custo else registro["custo_unitario"]
+
+        entrada_min = input(f"Estoque mínimo [{registro['estoque_minimo']:g}]: ").strip()
+        novo_min = float(entrada_min.replace(",", ".")) if entrada_min else registro["estoque_minimo"]
+
+        entrada_ideal = input(f"Estoque ideal [{registro['estoque_ideal']:g}]: ").strip()
+        novo_ideal = float(entrada_ideal.replace(",", ".")) if entrada_ideal else registro["estoque_ideal"]
+
+        cursor.execute("""
+            UPDATE estoque
+            SET ingrediente = ?,
+                unidade = ?,
+                quantidade = ?,
+                custo_unitario = ?,
+                estoque_minimo = ?,
+                estoque_ideal = ?
+            WHERE id = ?
+        """, (novo_nome, nova_unidade, nova_quantidade, novo_custo, novo_min, novo_ideal, id_ingrediente))
+
+        if nova_quantidade != registro["quantidade"]:
+            diferenca = abs(nova_quantidade - registro["quantidade"])
+            custo_diferenca = round(diferenca * novo_custo, 2)
+            agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            cursor.execute("""
+                INSERT INTO movimentacoes_estoque (ingrediente_id, tipo, quantidade, custo_total, data_hora)
+                VALUES (?, 'ajuste', ?, ?, ?)
+            """, (id_ingrediente, diferenca, custo_diferenca, agora))
+
+        conexao.commit()
+
+        novo_status = calcular_status_estoque(nova_quantidade, novo_min, novo_ideal)
+        print(f"\nIngrediente '{novo_nome.capitalize()}' atualizado com sucesso!")
+        print(f"Saldo atual: {nova_quantidade:g} {nova_unidade} | Status: {novo_status}")
+
+    except ValueError:
+        conexao.rollback()
+        print("Erro: digite apenas números válidos para ID, quantidade e valores.")
+    except sqlite3.IntegrityError as erro:
+        conexao.rollback()
+        print(f"Erro ao atualizar no banco (verifique nome duplicado, unidade válida ou estoque ideal >= mínimo): {erro}")
+    finally:
+        conexao.close()
+
 def menu_estoque():
     while True:
         print("\nVocê está na aba estoque!")
         print("1 - Cadastrar ingrediente")
         print("2 - Consultar estoque")
+        print("3 - Editar estoque")
         print("0 - Voltar para a aba cozinha")
         opcao = input("Escolha sua opção: ").strip()
 
@@ -134,6 +229,8 @@ def menu_estoque():
             cadastrar_estoque()
         elif opcao == "2":
             consultar_estoque()
+        elif opcao == "3":
+            editar_estoque()
         elif opcao == "0":
             print("Saindo da aba estoque...")
             break
