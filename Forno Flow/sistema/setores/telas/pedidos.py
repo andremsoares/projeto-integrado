@@ -6,7 +6,6 @@ from setores.telas.receitas import (
     calcular_custo_receita,
     verificar_disponibilidade,
     consumir_estoque_receita,
-    capacidade_producao,
     listar_produtos_ativos
 )
 

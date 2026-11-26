@@ -342,17 +342,422 @@ def consultar_receitas():
     finally:
         conexao.close()
 
+# consultar ficha técnica
+
+def consultar_ficha_tecnica():
+    print("\n--- CONSULTAR FICHA TÉCNICA ---")
+    conexao = conectar()
+    try:
+        cursor = conexao.cursor()
+        cursor.execute("""
+            SELECT id, nome, categoria
+            FROM produtos
+            WHERE ativo = 1
+            ORDER BY id
+        """)
+        produtos = cursor.fetchall()
+
+        if not produtos:
+            print("Nenhum produto ativo cadastrado no cardápio.")
+            return
+
+        print("\nProdutos cadastrados:")
+        for prod in produtos:
+            print(f"  ID {prod['id']} | {prod['nome']} ({prod['categoria']})")
+
+        try:
+            produto_id = int(input("\nDigite o ID do produto para ver a ficha técnica: ").strip())
+        except ValueError:
+            print("Erro: Digite um número de ID válido.")
+            return
+
+        cursor.execute("""
+            SELECT id, nome, categoria, preco
+            FROM produtos
+            WHERE id = ? AND ativo = 1
+        """, (produto_id,))
+        produto = cursor.fetchone()
+
+        if not produto:
+            print("Erro: Produto não encontrado ou inativo no cardápio.")
+            return
+
+        cursor.execute("""
+            SELECT e.id AS ingrediente_id,
+                   e.ingrediente,
+                   e.unidade,
+                   e.custo_unitario,
+                   e.quantidade AS saldo_atual,
+                   e.ativo AS ingrediente_ativo,
+                   r.quantidade_necessaria
+            FROM receitas r
+            INNER JOIN estoque e ON r.ingrediente_id = e.id
+            WHERE r.produto_id = ?
+            ORDER BY e.ingrediente
+        """, (produto_id,))
+        itens = cursor.fetchall()
+
+        print(f"\n========== FICHA TÉCNICA: {produto['nome'].upper()} ==========")
+        print(f"Categoria: {produto['categoria']} | Preço de venda: R$ {produto['preco']:.2f}")
+
+        if not itens:
+            print("Este produto não possui ingredientes vinculados.")
+            return
+
+        print("\nComposição por unidade produzida:")
+        for item in itens:
+            custo_item = round(item["quantidade_necessaria"] * item["custo_unitario"], 2)
+
+            if item["ingrediente_ativo"] == 0:
+                status_ing = " [DESATIVADO NO ESTOQUE]"
+                rendimento = 0
+            else:
+                status_ing = ""
+                rendimento = (
+                    int(round(item["saldo_atual"] / item["quantidade_necessaria"], 6))
+                    if item["quantidade_necessaria"] > 0 else 0
+                )
+
+            print(
+                f"  - ID {item['ingrediente_id']} | {item['ingrediente']}: "
+                f"{item['quantidade_necessaria']:g} {item['unidade']} | "
+                f"Custo: R$ {custo_item:.2f} | "
+                f"Estoque: {item['saldo_atual']:g} {item['unidade']} (rende {rendimento} un){status_ing}"
+            )
+
+        custo_total = calcular_custo_receita(produto_id)
+        lucro = round(produto["preco"] - custo_total, 2)
+        margem_porcentagem = round((lucro / produto["preco"]) * 100, 1) if produto["preco"] > 0 else 0.0
+        capacidade = capacidade_producao(produto_id)
+
+        print("\nResumo da Receita:")
+        print(f"  Custo total de produção: R$ {custo_total:.2f}")
+        print(f"  Lucro bruto unitário:    R$ {lucro:.2f} ({margem_porcentagem}%)")
+        print(f"  Capacidade atual:        {capacidade} un")
+
+    finally:
+        conexao.close()
+
+# Editar receita
+
+def editar_receita():
+    print("\n--- EDITAR INGREDIENTES DA RECEITA ---")
+    conexao = conectar()
+    try:
+        cursor = conexao.cursor()
+        cursor.execute("""
+            SELECT id, nome, categoria, preco
+            FROM produtos
+            WHERE ativo = 1
+            ORDER BY id
+        """)
+        produtos = cursor.fetchall()
+
+        if not produtos:
+            print("Nenhum produto ativo cadastrado no cardápio.")
+            return
+
+        print("\nProdutos disponíveis:")
+        for prod in produtos:
+            print(f"  ID {prod['id']} | {prod['nome']} ({prod['categoria']})")
+
+        try:
+            produto_id = int(input("\nDigite o ID do produto que deseja editar: ").strip())
+        except ValueError:
+            print("Erro: Digite um número de ID válido.")
+            return
+
+        cursor.execute("""
+            SELECT id, nome, preco
+            FROM produtos
+            WHERE id = ? AND ativo = 1
+        """, (produto_id,))
+        produto = cursor.fetchone()
+
+        if not produto:
+            print("Erro: Produto não encontrado ou inativo no cardápio.")
+            return
+
+        while True:
+            cursor.execute("""
+                SELECT e.id AS ingrediente_id,
+                       e.ingrediente,
+                       e.unidade,
+                       e.ativo AS ingrediente_ativo,
+                       r.quantidade_necessaria
+                FROM receitas r
+                INNER JOIN estoque e ON r.ingrediente_id = e.id
+                WHERE r.produto_id = ?
+                ORDER BY e.ingrediente
+            """, (produto_id,))
+            itens_atuais = cursor.fetchall()
+
+            print(f"\n=== FICHA TÉCNICA ATUAL: {produto['nome'].upper()} ===")
+            if not itens_atuais:
+                print("  (Nenhum ingrediente vinculado)")
+            else:
+                for item in itens_atuais:
+                    aviso = " [DESATIVADO NO ESTOQUE]" if item["ingrediente_ativo"] == 0 else ""
+                    print(
+                        f"  ID {item['ingrediente_id']} | {item['ingrediente']}: "
+                        f"{item['quantidade_necessaria']:g} {item['unidade']}{aviso}"
+                    )
+
+            print("\nO que deseja fazer?")
+            print("1 - Alterar quantidade de um ingrediente")
+            print("2 - Adicionar novo ingrediente")
+            print("3 - Remover ingrediente")
+            print("0 - Concluir edição")
+
+            sub_opcao = input("Escolha uma opção: ").strip()
+
+            if sub_opcao == "1":
+                if not itens_atuais:
+                    print("Não há ingredientes nesta receita para alterar.")
+                    continue
+
+                ids_na_receita = {item["ingrediente_id"]: item for item in itens_atuais}
+                try:
+                    ing_id = int(input("ID do ingrediente a alterar: ").strip())
+                except ValueError:
+                    print("Digite um ID numérico válido.")
+                    continue
+
+                if ing_id not in ids_na_receita:
+                    print("Este ingrediente não faz parte desta receita.")
+                    continue
+
+                ing_escolhido = ids_na_receita[ing_id]
+                try:
+                    nova_qtd = float(
+                        input(f"Nova quantidade de '{ing_escolhido['ingrediente']}' ({ing_escolhido['unidade']}): ")
+                        .strip().replace(",", ".")
+                    )
+                    if nova_qtd <= 0:
+                        print("A quantidade deve ser maior que zero.")
+                        continue
+                except ValueError:
+                    print("Digite um valor numérico válido.")
+                    continue
+
+                cursor.execute("""
+                    UPDATE receitas
+                    SET quantidade_necessaria = ?
+                    WHERE produto_id = ? AND ingrediente_id = ?
+                """, (round(nova_qtd, 4), produto_id, ing_id))
+                conexao.commit()
+                print(f"Quantidade de '{ing_escolhido['ingrediente']}' atualizada para {nova_qtd:g} {ing_escolhido['unidade']}.")
+
+            elif sub_opcao == "2":
+                ids_ja_usados = {item["ingrediente_id"] for item in itens_atuais}
+
+                cursor.execute("""
+                    SELECT id, ingrediente, unidade, custo_unitario
+                    FROM estoque
+                    WHERE ativo = 1
+                    ORDER BY id
+                """)
+                todos_insumos = cursor.fetchall()
+                disponiveis_para_add = [ins for ins in todos_insumos if ins["id"] not in ids_ja_usados]
+
+                if not disponiveis_para_add:
+                    print("Todos os ingredientes ativos do estoque já estão nesta receita.")
+                    continue
+
+                print("\nIngredientes disponíveis para adicionar:")
+                ids_validos = {}
+                for ins in disponiveis_para_add:
+                    ids_validos[ins["id"]] = ins
+                    print(f"  ID {ins['id']} | {ins['ingrediente']} ({ins['unidade']}) - R$ {ins['custo_unitario']:.2f}/{ins['unidade']}")
+
+                try:
+                    ing_id = int(input("\nID do ingrediente para adicionar: ").strip())
+                except ValueError:
+                    print("Digite um ID numérico válido.")
+                    continue
+
+                if ing_id not in ids_validos:
+                    print("ID inválido ou ingrediente já presente na receita.")
+                    continue
+
+                ins_escolhido = ids_validos[ing_id]
+                try:
+                    qtd_nova = float(
+                        input(f"Quantidade de '{ins_escolhido['ingrediente']}' por unidade ({ins_escolhido['unidade']}): ")
+                        .strip().replace(",", ".")
+                    )
+                    if qtd_nova <= 0:
+                        print("A quantidade deve ser maior que zero.")
+                        continue
+                except ValueError:
+                    print("Digite um valor numérico válido.")
+                    continue
+
+                cursor.execute("""
+                    INSERT INTO receitas (produto_id, ingrediente_id, quantidade_necessaria)
+                    VALUES (?, ?, ?)
+                """, (produto_id, ing_id, round(qtd_nova, 4)))
+                conexao.commit()
+                print(f"Ingrediente '{ins_escolhido['ingrediente']}' adicionado à receita.")
+
+            elif sub_opcao == "3":
+                if len(itens_atuais) <= 1:
+                    print("Operação bloqueada: a receita precisa manter pelo menos 1 ingrediente ativo.")
+                    continue
+
+                ids_na_receita = {item["ingrediente_id"]: item for item in itens_atuais}
+                try:
+                    ing_id = int(input("ID do ingrediente para remover: ").strip())
+                except ValueError:
+                    print("Digite um ID numérico válido.")
+                    continue
+
+                if ing_id not in ids_na_receita:
+                    print("Este ingrediente não faz parte desta receita.")
+                    continue
+
+                ing_removido = ids_na_receita[ing_id]
+                cursor.execute("""
+                    DELETE FROM receitas
+                    WHERE produto_id = ? AND ingrediente_id = ?
+                """, (produto_id, ing_id))
+                conexao.commit()
+                print(f"Ingrediente '{ing_removido['ingrediente']}' removido da receita.")
+
+            elif sub_opcao == "0":
+                novo_custo = calcular_custo_receita(produto_id)
+                nova_margem = round(produto["preco"] - novo_custo, 2)
+                print(f"\nEdição concluída! Novo custo de produção: R$ {novo_custo:.2f} | Nova margem bruta: R$ {nova_margem:.2f}")
+                break
+
+            else:
+                print("Opção inválida.")
+
+    except sqlite3.Error as erro:
+        conexao.rollback()
+        print(f"Erro no banco de dados ao editar receita: {erro}")
+    finally:
+        conexao.close()
+
+# editar ou desativar produto
+
+def editar_ou_desativar_produto():
+    print("\n--- ALTERAR PREÇO OU DESATIVAR PRODUTO ---")
+    conexao = conectar()
+    try:
+        cursor = conexao.cursor()
+        cursor.execute("""
+            SELECT id, nome, categoria, preco
+            FROM produtos
+            WHERE ativo = 1
+            ORDER BY id
+        """)
+        produtos = cursor.fetchall()
+
+        if not produtos:
+            print("Nenhum produto ativo cadastrado no cardápio.")
+            return
+
+        print("\nProdutos ativos:")
+        for prod in produtos:
+            custo = calcular_custo_receita(prod["id"])
+            print(
+                f"  ID {prod['id']} | {prod['nome']} ({prod['categoria']}) | "
+                f"Preço atual: R$ {prod['preco']:.2f} | Custo: R$ {custo:.2f}"
+            )
+
+        try:
+            produto_id = int(input("\nDigite o ID do produto: ").strip())
+        except ValueError:
+            print("Erro: Digite um número de ID válido.")
+            return
+
+        cursor.execute("""
+            SELECT id, nome, categoria, preco
+            FROM produtos
+            WHERE id = ? AND ativo = 1
+        """, (produto_id,))
+        produto = cursor.fetchone()
+
+        if not produto:
+            print("Erro: Produto não encontrado ou já desativado.")
+            return
+
+        print(f"\nProduto selecionado: {produto['nome']} (Preço atual: R$ {produto['preco']:.2f})")
+        print("1 - Alterar preço de venda")
+        print("2 - Desativar produto do cardápio")
+        print("0 - Cancelar")
+
+        opcao = input("Escolha uma opção: ").strip()
+
+        if opcao == "1":
+            try:
+                novo_preco = float(
+                    input("Novo preço de venda (R$): ").strip().replace(",", ".")
+                )
+                if novo_preco < 0:
+                    print("Erro: O preço não pode ser negativo.")
+                    return
+            except ValueError:
+                print("Erro: Digite um valor numérico válido.")
+                return
+
+            novo_preco = round(novo_preco, 2)
+            cursor.execute("""
+                UPDATE produtos
+                SET preco = ?
+                WHERE id = ?
+            """, (novo_preco, produto_id))
+            conexao.commit()
+
+            custo = calcular_custo_receita(produto_id)
+            lucro = round(novo_preco - custo, 2)
+            margem_pct = round((lucro / novo_preco) * 100, 1) if novo_preco > 0 else 0.0
+
+            print(f"\nPreço de '{produto['nome']}' atualizado para R$ {novo_preco:.2f}!")
+            print(f"Custo: R$ {custo:.2f} | Novo lucro bruto: R$ {lucro:.2f} ({margem_pct}%)")
+
+        elif opcao == "2":
+            confirmacao = input(
+                f"Tem certeza que deseja desativar '{produto['nome']}' do cardápio? (S/N): "
+            ).strip().upper()
+
+            if confirmacao != "S":
+                print("Operação cancelada.")
+                return
+
+            cursor.execute("""
+                UPDATE produtos
+                SET ativo = 0
+                WHERE id = ?
+            """, (produto_id,))
+            conexao.commit()
+
+            print(
+                f"\nProduto '{produto['nome']}' desativado com sucesso! "
+                "Ele não aparecerá mais para novos pedidos, mas o histórico de vendas foi preservado."
+            )
+
+        elif opcao == "0":
+            print("Operação cancelada.")
+
+        else:
+            print("Opção inválida.")
+
+    except sqlite3.Error as erro:
+        conexao.rollback()
+        print(f"Erro no banco de dados: {erro}")
+    finally:
+        conexao.close()
+
 def menu_receitas():
     while True:
         print("\nVocê está na aba receitas!")
         print("1 - Cadastrar receita")
         print("2 - Consultar receitas")
         print("3 - Consultar ficha técnica")
-        print("4 - Pesquisar receitas")
-        print("5 - Editar receita")
-        print("6 - Remover ingrediente da receita")
-        print("7 - Consultar custo de produção")
-        print("8 - Consultar capacidade de produção")
+        print("4 - Editar receita")
+        print("5 - Alterar preço ou desativar produto")
         print("0 - Voltar para a aba cozinha")
 
         opcao = input("Escolha sua opção: ").strip()
@@ -361,6 +766,12 @@ def menu_receitas():
             cadastrar_receita()
         elif opcao == "2":
             consultar_receitas()
+        elif opcao == "3":
+            consultar_ficha_tecnica()
+        elif opcao == "4":
+            editar_receita()
+        elif opcao == "5":
+            editar_ou_desativar_produto()
         elif opcao == "0":
             print("Saindo da aba receitas...")
             break
