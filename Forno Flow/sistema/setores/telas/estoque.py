@@ -161,7 +161,7 @@ def editar_estoque():
             return
 
         for item in itens:
-            print(f"{item['id'].capitalize()} - {item['ingrediente'].capitalize()} ({item['quantidade'].capitalize():g} {item['unidade'].capitalize()})")
+            print(f"{item['id']} - {item['ingrediente']} ({item['quantidade']:g} {item['unidade']})")
 
         id_ingrediente = int(input("\nDigite o ID do ingrediente que deseja editar: ").strip())
 
@@ -250,7 +250,7 @@ def registrar_compra():
             return
 
         for item in itens:
-            print(f"{item['id'].capitalize()} - {item['ingrediente'].capitalize()} (Atual: {item['quantidade'].capitalize():g} {item['unidade'].capitalize()} | Custo: R$ {item['custo_unitario']:.2f})")
+            print(f"{item['id']} - {item['ingrediente']} (Atual: {item['quantidade']:g} {item['unidade']} | Custo: R$ {item['custo_unitario']:.2f})")
 
         id_ingrediente = int(input("\nDigite o ID do ingrediente comprado: ").strip())
 
@@ -330,7 +330,7 @@ def registrar_perda():
             return
 
         for item in itens:
-            print(f"{item['id'].capitalize()} - {item['ingrediente'].capitalize()} (Atual: {item['quantidade'].capitalize():g} {item['unidade'].capitalize()} | Custo: R$ {item['custo_unitario']:.2f})")
+            print(f"{item['id']} - {item['ingrediente']} (Atual: {item['quantidade']:g} {item['unidade']} | Custo: R$ {item['custo_unitario']:.2f})")
 
         id_ingrediente = int(input("\nDigite o ID do ingrediente perdido: ").strip())
 
@@ -542,6 +542,7 @@ def desativar_ingrediente():
     finally:
         conexao.close()
 
+# lista de reposição
 
 def lista_reposicao():
     conexao = conectar()

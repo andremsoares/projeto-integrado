@@ -64,9 +64,15 @@ def inicializar_banco():
             id INTEGER PRIMARY KEY,
             nome TEXT NOT NULL UNIQUE,
             categoria TEXT NOT NULL,
-            preco REAL NOT NULL CHECK (preco >= 0)
+            preco REAL NOT NULL CHECK (preco >= 0),
+            ativo INTEGER NOT NULL DEFAULT 1 CHECK (ativo IN (0, 1))
         )
     """)
+
+    try:
+        cursor.execute("ALTER TABLE produtos ADD COLUMN ativo INTEGER NOT NULL DEFAULT 1 CHECK (ativo IN (0, 1))")
+    except sqlite3.OperationalError:
+        pass
 
     # 3. Tabela de Receitas (ficha técnica: Produto <-> Estoque)
     cursor.execute("""
@@ -94,7 +100,7 @@ def inicializar_banco():
             tipo_entrega TEXT NOT NULL,
             bairro TEXT,
             taxa_entrega REAL NOT NULL DEFAULT 0 CHECK (taxa_entrega >= 0),
-            status TEXT NOT NULL DEFAULT 'aprovado',
+            status TEXT NOT NULL DEFAULT 'aprovado' CHECK (status IN ('aprovado', 'em preparo', 'saiu para entrega', 'concluido', 'cancelado')),
             data_hora TEXT NOT NULL,
             FOREIGN KEY (produto_id) REFERENCES produtos(id)
         )
@@ -112,6 +118,6 @@ def inicializar_banco():
             FOREIGN KEY (ingrediente_id) REFERENCES estoque(id)
         )
     """)
-
+    
     conexao.commit()
     conexao.close()
