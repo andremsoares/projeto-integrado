@@ -542,7 +542,6 @@ def desativar_ingrediente():
     finally:
         conexao.close()
 
-# lista de reposição
 
 def lista_reposicao():
     conexao = conectar()
