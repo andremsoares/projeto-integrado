@@ -1,12 +1,15 @@
 import sqlite3
 from banco import conectar
 
+
 # cálculo de custo de receita
 
-def calcular_custo_receita(produto_id):
-    conexao = conectar()
-    try:
+def calcular_custo_receita(produto_id, cursor=None):
+    conexao = None
+    if cursor is None:
+        conexao = conectar()
         cursor = conexao.cursor()
+    try:
         cursor.execute("""
             SELECT r.quantidade_necessaria, e.custo_unitario
             FROM receitas r
@@ -24,16 +27,21 @@ def calcular_custo_receita(produto_id):
         )
         return round(custo_total, 2)
     finally:
-        conexao.close()
+        if conexao is not None:
+            conexao.close()
+
+
 # verificar disponibilidade
 
-def verificar_disponibilidade(produto_id, quantidade_pedida=1):
+def verificar_disponibilidade(produto_id, quantidade_pedida=1, cursor=None):
     if quantidade_pedida <= 0:
         return False, "A quantidade pedida deve ser maior que zero."
 
-    conexao = conectar()
-    try:
+    conexao = None
+    if cursor is None:
+        conexao = conectar()
         cursor = conexao.cursor()
+    try:
         cursor.execute("""
             SELECT nome, ativo
             FROM produtos
@@ -74,14 +82,18 @@ def verificar_disponibilidade(produto_id, quantidade_pedida=1):
 
         return True, "OK"
     finally:
-        conexao.close()
+        if conexao is not None:
+            conexao.close()
+
 
 # capacidade de produção
 
-def capacidade_producao(produto_id):
-    conexao = conectar()
-    try:
+def capacidade_producao(produto_id, cursor=None):
+    conexao = None
+    if cursor is None:
+        conexao = conectar()
         cursor = conexao.cursor()
+    try:
         cursor.execute("""
             SELECT ativo
             FROM produtos
@@ -91,6 +103,7 @@ def capacidade_producao(produto_id):
 
         if not produto or produto["ativo"] == 0:
             return 0
+
         cursor.execute("""
             SELECT r.quantidade_necessaria,
                    e.quantidade AS saldo_atual,
@@ -114,7 +127,9 @@ def capacidade_producao(produto_id):
 
         return min(limites)
     finally:
-        conexao.close()
+        if conexao is not None:
+            conexao.close()
+
 
 # consumo de estoque para receita
 
@@ -144,6 +159,37 @@ def consumir_estoque_receita(cursor, produto_id, qtd_pedida, data_hora):
             VALUES (?, 'saida_venda', ?, ?, ?)
         """, (item["ingrediente_id"], qtd_consumida, custo_saida, data_hora))
 
+
+# estorno de estoque por cancelamento de pedido
+
+def estornar_estoque_receita(cursor, produto_id, qtd_pedida, data_hora):
+    cursor.execute("""
+        SELECT r.ingrediente_id,
+               r.quantidade_necessaria,
+               e.custo_unitario
+        FROM receitas r
+        INNER JOIN estoque e ON r.ingrediente_id = e.id
+        WHERE r.produto_id = ?
+    """, (produto_id,))
+    ingredientes = cursor.fetchall()
+
+    for item in ingredientes:
+        quantidade_estornada = round(item["quantidade_necessaria"] * qtd_pedida, 4)
+        custo_estorno = round(quantidade_estornada * item["custo_unitario"], 2)
+
+        cursor.execute("""
+            UPDATE estoque
+            SET quantidade = ROUND(quantidade + ?, 4)
+            WHERE id = ?
+        """, (quantidade_estornada, item["ingrediente_id"]))
+
+        # Certifique-se de que o CHECK de movimentacoes_estoque.tipo no banco.py inclui 'estorno'
+        cursor.execute("""
+            INSERT INTO movimentacoes_estoque (ingrediente_id, tipo, quantidade, custo_total, data_hora)
+            VALUES (?, 'estorno', ?, ?, ?)
+        """, (item["ingrediente_id"], quantidade_estornada, custo_estorno, data_hora))
+
+
 # cadastrar receita
 
 def cadastrar_receita():
@@ -152,7 +198,6 @@ def cadastrar_receita():
     try:
         cursor = conexao.cursor()
 
-        # 1. Lista os insumos ativos para facilitar a montagem da receita
         cursor.execute("""
             SELECT id, ingrediente, unidade, custo_unitario
             FROM estoque
@@ -169,7 +214,6 @@ def cadastrar_receita():
         for insumo in insumos_disponiveis:
             print(f"  ID {insumo['id']} | {insumo['ingrediente']} ({insumo['unidade']}) - R$ {insumo['custo_unitario']:.2f}/{insumo['unidade']}")
 
-        # 2. Dados do produto no cardápio
         nome = input("\nNome do produto (ex: Pizza Calabresa): ").strip()
         if not nome:
             print("Erro: O nome do produto não pode ficar vazio.")
@@ -189,21 +233,19 @@ def cadastrar_receita():
             print("Erro: Digite um valor numérico válido para o preço.")
             return
 
-        # 3. Insere o produto (ainda sem commit, aguardando os ingredientes)
         cursor.execute("""
             INSERT INTO produtos (nome, categoria, preco, ativo)
             VALUES (?, ?, ?, 1)
         """, (nome, categoria, round(preco, 2)))
         produto_id = cursor.lastrowid
 
-        # 4. Loop para vincular os ingredientes da ficha técnica
         print("\n--- MONTAGEM DA RECEITA (Digite 0 no ID para finalizar) ---")
         ids_validos = {item["id"]: item for item in insumos_disponiveis}
         ingredientes_adicionados = set()
 
         while True:
             try:
-                ing_id = int(input("\nID do ingrediente (ou 0 para concluir): "))
+                ing_id = int(input("\nID do ingrediente (ou 0 para concluir): ").strip())
             except ValueError:
                 print("Digite apenas o número do ID.")
                 continue
@@ -241,10 +283,9 @@ def cadastrar_receita():
             ingredientes_adicionados.add(ing_id)
             print(f"  + {insumo_escolhido['ingrediente']} ({qtd_necessaria:g} {insumo_escolhido['unidade']}) adicionado.")
 
-        # 5. Salva produto e ficha técnica juntos no banco
         conexao.commit()
 
-        custo_producao = calcular_custo_receita(produto_id)
+        custo_producao = calcular_custo_receita(produto_id, cursor=cursor)
         lucro_bruto = round(preco - custo_producao, 2)
         print(f"\nProduto '{nome}' (ID {produto_id}) cadastrado com sucesso!")
         print(f"Custo de produção: R$ {custo_producao:.2f} | Preço: R$ {preco:.2f} | Margem bruta: R$ {lucro_bruto:.2f}")
@@ -257,6 +298,7 @@ def cadastrar_receita():
         print(f"Erro inesperado ao cadastrar receita: {erro}")
     finally:
         conexao.close()
+
 
 # listar produtos ativos
 
@@ -274,10 +316,10 @@ def listar_produtos_ativos():
 
         cardapio = []
         for prod in produtos:
-            custo = calcular_custo_receita(prod["id"])
+            custo = calcular_custo_receita(prod["id"], cursor=cursor)
             lucro = round(prod["preco"] - custo, 2)
             margem_pct = round((lucro / prod["preco"]) * 100, 1) if prod["preco"] > 0 else 0.0
-            disponivel = capacidade_producao(prod["id"])
+            disponivel = capacidade_producao(prod["id"], cursor=cursor)
 
             cardapio.append({
                 "id": prod["id"],
@@ -292,6 +334,7 @@ def listar_produtos_ativos():
         return cardapio
     finally:
         conexao.close()
+
 
 # consultar receita
 
@@ -310,37 +353,7 @@ def consultar_receitas():
             f"Venda: R$ {item['preco']:.2f} | Custo: R$ {item['custo']:.2f} | "
             f"Lucro: R$ {item['lucro']:.2f} ({item['margem_pct']}%) | Disponível hoje: {status_estoque}"
         )
-    print("\n--- CARDÁPIO E RENTABILIDADE DAS RECEITAS ---")
-    conexao = conectar()
-    try:
-        cursor = conexao.cursor()
-        cursor.execute("""
-            SELECT id, nome, categoria, preco
-            FROM produtos
-            WHERE ativo = 1
-            ORDER BY id
-        """)
-        produtos = cursor.fetchall()
 
-        if not produtos:
-            print("Nenhum produto ativo cadastrado no cardápio.")
-            return
-
-        for prod in produtos:
-            custo = calcular_custo_receita(prod["id"])
-            lucro = round(prod["preco"] - custo, 2)
-            margem_pct = round((lucro / prod["preco"]) * 100, 1) if prod["preco"] > 0 else 0.0
-            disponivel = capacidade_producao(prod["id"])
-
-            status_estoque = f"{disponivel} un" if disponivel > 0 else "ESGOTADO (falta insumo)"
-
-            print(
-                f"ID {prod['id']} | {prod['nome']} ({prod['categoria']}) | "
-                f"Venda: R$ {prod['preco']:.2f} | Custo: R$ {custo:.2f} | "
-                f"Lucro: R$ {lucro:.2f} ({margem_pct}%) | Disponível hoje: {status_estoque}"
-            )
-    finally:
-        conexao.close()
 
 # consultar ficha técnica
 
@@ -425,10 +438,10 @@ def consultar_ficha_tecnica():
                 f"Estoque: {item['saldo_atual']:g} {item['unidade']} (rende {rendimento} un){status_ing}"
             )
 
-        custo_total = calcular_custo_receita(produto_id)
+        custo_total = calcular_custo_receita(produto_id, cursor=cursor)
         lucro = round(produto["preco"] - custo_total, 2)
         margem_porcentagem = round((lucro / produto["preco"]) * 100, 1) if produto["preco"] > 0 else 0.0
-        capacidade = capacidade_producao(produto_id)
+        capacidade = capacidade_producao(produto_id, cursor=cursor)
 
         print("\nResumo da Receita:")
         print(f"  Custo total de produção: R$ {custo_total:.2f}")
@@ -438,7 +451,8 @@ def consultar_ficha_tecnica():
     finally:
         conexao.close()
 
-# Editar receita
+
+# editar receita
 
 def editar_receita():
     print("\n--- EDITAR INGREDIENTES DA RECEITA ---")
@@ -602,7 +616,7 @@ def editar_receita():
 
             elif sub_opcao == "3":
                 if len(itens_atuais) <= 1:
-                    print("Operação bloqueada: a receita precisa manter pelo menos 1 ingrediente ativo.")
+                    print("Operação bloqueada: a receita precisa manter pelo menos 1 ingrediente.")
                     continue
 
                 ids_na_receita = {item["ingrediente_id"]: item for item in itens_atuais}
@@ -616,6 +630,14 @@ def editar_receita():
                     print("Este ingrediente não faz parte desta receita.")
                     continue
 
+                ativos_restantes = sum(
+                    1 for item in itens_atuais
+                    if item["ingrediente_id"] != ing_id and item["ingrediente_ativo"] == 1
+                )
+                if ativos_restantes == 0 and any(item["ingrediente_ativo"] == 1 for item in itens_atuais):
+                    print("Operação bloqueada: a receita precisa manter pelo menos 1 ingrediente ativo no estoque.")
+                    continue
+
                 ing_removido = ids_na_receita[ing_id]
                 cursor.execute("""
                     DELETE FROM receitas
@@ -625,7 +647,7 @@ def editar_receita():
                 print(f"Ingrediente '{ing_removido['ingrediente']}' removido da receita.")
 
             elif sub_opcao == "0":
-                novo_custo = calcular_custo_receita(produto_id)
+                novo_custo = calcular_custo_receita(produto_id, cursor=cursor)
                 nova_margem = round(produto["preco"] - novo_custo, 2)
                 print(f"\nEdição concluída! Novo custo de produção: R$ {novo_custo:.2f} | Nova margem bruta: R$ {nova_margem:.2f}")
                 break
@@ -639,7 +661,8 @@ def editar_receita():
     finally:
         conexao.close()
 
-# editar ou desativar produto
+
+# alterar preço ou desativar produto
 
 def editar_ou_desativar_produto():
     print("\n--- ALTERAR PREÇO OU DESATIVAR PRODUTO ---")
@@ -660,7 +683,7 @@ def editar_ou_desativar_produto():
 
         print("\nProdutos ativos:")
         for prod in produtos:
-            custo = calcular_custo_receita(prod["id"])
+            custo = calcular_custo_receita(prod["id"], cursor=cursor)
             print(
                 f"  ID {prod['id']} | {prod['nome']} ({prod['categoria']}) | "
                 f"Preço atual: R$ {prod['preco']:.2f} | Custo: R$ {custo:.2f}"
@@ -710,7 +733,7 @@ def editar_ou_desativar_produto():
             """, (novo_preco, produto_id))
             conexao.commit()
 
-            custo = calcular_custo_receita(produto_id)
+            custo = calcular_custo_receita(produto_id, cursor=cursor)
             lucro = round(novo_preco - custo, 2)
             margem_pct = round((lucro / novo_preco) * 100, 1) if novo_preco > 0 else 0.0
 
@@ -749,6 +772,7 @@ def editar_ou_desativar_produto():
         print(f"Erro no banco de dados: {erro}")
     finally:
         conexao.close()
+
 
 def menu_receitas():
     while True:

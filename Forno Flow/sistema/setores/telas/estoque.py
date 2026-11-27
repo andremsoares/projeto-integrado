@@ -2,11 +2,7 @@ import sqlite3
 from datetime import datetime
 from banco import conectar
 
-horario = datetime.now().strftime("%H:%M")
-
-# garantir com que os pedidos possam ser feitos somente com o que tem no estoque, passando por uma conferência no banco de dados para validar o pedido
-
-#cadastro de item no estoque
+# cadastro de item no estoque
 
 def cadastrar_estoque():
     print("\n--- CADASTRAR INGREDIENTE ---")
@@ -15,6 +11,10 @@ def cadastrar_estoque():
         cursor = conexao.cursor()
 
         ingrediente = input("Digite o nome do ingrediente: ").strip()
+        if not ingrediente:
+            print("Erro: o nome do ingrediente não pode ficar vazio.")
+            return
+
         unidade = input("Digite a unidade de medida (g, ml, un, l, kg): ").strip().lower()
         quantidade = float(input("Digite a quantidade disponível: ").replace(",", "."))
         custo_unitario = float(input("Digite o custo unitário: ").replace(",", "."))
@@ -29,7 +29,7 @@ def cadastrar_estoque():
         ingrediente_id = cursor.lastrowid
 
         if quantidade > 0:
-            agora = horario
+            agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             custo_total = round(quantidade * custo_unitario, 2)
             cursor.execute("""
                 INSERT INTO movimentacoes_estoque (ingrediente_id, tipo, quantidade, custo_total, data_hora)
@@ -47,10 +47,10 @@ def cadastrar_estoque():
     finally:
         conexao.close()
 
-# calculo de status de estoque
+
+# cálculo de status de estoque
 
 def calcular_status_estoque(quantidade, estoque_minimo, estoque_ideal):
-
     if quantidade is None:
         return "Não informado"
     if quantidade == 0:
@@ -69,6 +69,7 @@ def calcular_status_estoque(quantidade, estoque_minimo, estoque_ideal):
     else:
         return "Estoque baixo"
 
+
 # consulta o estoque
 
 def consultar_estoque(nome="", prioridade=""):
@@ -79,6 +80,7 @@ def consultar_estoque(nome="", prioridade=""):
             SELECT id, ingrediente, unidade, quantidade,
                    custo_unitario, estoque_minimo, estoque_ideal
             FROM estoque
+            WHERE ativo = 1
             ORDER BY ingrediente ASC
         """)
         ingredientes = cursor.fetchall()
@@ -89,10 +91,10 @@ def consultar_estoque(nome="", prioridade=""):
     print("ID | Ingrediente | Custo Unit. | Estoque | Status")
 
     if not ingredientes:
-        print("Nenhum item cadastrado.")
+        print("Nenhum item ativo cadastrado.")
         return
 
-    encontrados = 0  # NOVO
+    encontrados = 0
 
     for registro in ingredientes:
         id_ingrediente = registro["id"]
@@ -103,16 +105,11 @@ def consultar_estoque(nome="", prioridade=""):
         estoque_minimo = registro["estoque_minimo"]
         estoque_ideal = registro["estoque_ideal"]
 
-        # NOVO: filtro por nome
         if nome and nome not in ingrediente.lower():
             continue
 
         codigo = f"#ING{id_ingrediente:03d}"
-
-        if custo_unitario is None:
-            preco = "Não informado"
-        else:
-            preco = f"R$ {custo_unitario:.2f}"
+        preco = "Não informado" if custo_unitario is None else f"R$ {custo_unitario:.2f}"
 
         if quantidade is None:
             estoque_atual = "Não informado"
@@ -123,17 +120,15 @@ def consultar_estoque(nome="", prioridade=""):
 
         status = calcular_status_estoque(quantidade, estoque_minimo, estoque_ideal)
 
-        # NOVO: filtro por status
         if prioridade and prioridade not in status.lower():
             continue
 
         print(f"{codigo} | {ingrediente.capitalize()} | {preco} | {estoque_atual} | {status}")
+        encontrados += 1
 
-        encontrados += 1  # NOVO
-
-    # NOVO: caso nenhum ingrediente passe pelos filtros
     if encontrados == 0:
         print("Nenhum ingrediente corresponde aos filtros.")
+
 
 # busca por prioridade
 
@@ -146,6 +141,7 @@ def prioridade_estoque():
 
     consultar_estoque(nome, prioridade)
 
+
 # modificar estoque
 
 def editar_estoque():
@@ -153,11 +149,16 @@ def editar_estoque():
     conexao = conectar()
     try:
         cursor = conexao.cursor()
-        cursor.execute("SELECT id, ingrediente, quantidade, unidade FROM estoque ORDER BY id ASC")
+        cursor.execute("""
+            SELECT id, ingrediente, quantidade, unidade
+            FROM estoque
+            WHERE ativo = 1
+            ORDER BY id ASC
+        """)
         itens = cursor.fetchall()
 
         if not itens:
-            print("Nenhum ingrediente cadastrado para editar.")
+            print("Nenhum ingrediente ativo cadastrado para editar.")
             return
 
         for item in itens:
@@ -169,12 +170,12 @@ def editar_estoque():
             SELECT id, ingrediente, unidade, quantidade,
                    custo_unitario, estoque_minimo, estoque_ideal
             FROM estoque
-            WHERE id = ?
+            WHERE id = ? AND ativo = 1
         """, (id_ingrediente,))
         registro = cursor.fetchone()
 
         if not registro:
-            print("Ingrediente não encontrado.")
+            print("Ingrediente não encontrado ou desativado.")
             return
 
         print("\nPressione ENTER para manter o valor atual.")
@@ -230,6 +231,7 @@ def editar_estoque():
     finally:
         conexao.close()
 
+
 # registrar compra
 
 def registrar_compra():
@@ -241,12 +243,13 @@ def registrar_compra():
         cursor.execute("""
             SELECT id, ingrediente, quantidade, unidade, custo_unitario
             FROM estoque
+            WHERE ativo = 1
             ORDER BY ingrediente ASC
         """)
         itens = cursor.fetchall()
 
         if not itens:
-            print("Nenhum ingrediente cadastrado. Cadastre o item antes de registrar uma compra.")
+            print("Nenhum ingrediente ativo cadastrado. Cadastre o item antes de registrar uma compra.")
             return
 
         for item in itens:
@@ -258,12 +261,12 @@ def registrar_compra():
             SELECT id, ingrediente, unidade, quantidade,
                    custo_unitario, estoque_minimo, estoque_ideal
             FROM estoque
-            WHERE id = ?
+            WHERE id = ? AND ativo = 1
         """, (id_ingrediente,))
         registro = cursor.fetchone()
 
         if not registro:
-            print("Ingrediente não encontrado.")
+            print("Ingrediente não encontrado ou desativado.")
             return
 
         quantidade_comprada = float(input(f"Quantidade comprada (em {registro['unidade']}): ").replace(",", "."))
@@ -310,6 +313,7 @@ def registrar_compra():
     finally:
         conexao.close()
 
+
 # registrar perda
 
 def registrar_perda():
@@ -321,12 +325,13 @@ def registrar_perda():
         cursor.execute("""
             SELECT id, ingrediente, quantidade, unidade, custo_unitario
             FROM estoque
+            WHERE ativo = 1
             ORDER BY ingrediente ASC
         """)
         itens = cursor.fetchall()
 
         if not itens:
-            print("Nenhum ingrediente cadastrado no estoque.")
+            print("Nenhum ingrediente ativo cadastrado no estoque.")
             return
 
         for item in itens:
@@ -338,12 +343,12 @@ def registrar_perda():
             SELECT id, ingrediente, unidade, quantidade,
                    custo_unitario, estoque_minimo, estoque_ideal
             FROM estoque
-            WHERE id = ?
+            WHERE id = ? AND ativo = 1
         """, (id_ingrediente,))
         registro = cursor.fetchone()
 
         if not registro:
-            print("Ingrediente não encontrado.")
+            print("Ingrediente não encontrado ou desativado.")
             return
 
         if registro["quantidade"] == 0:
@@ -378,7 +383,7 @@ def registrar_perda():
         conexao.commit()
 
         novo_status = calcular_status_estoque(
-            nova_qtd_total,
+            nova_quantidade_total,
             registro["estoque_minimo"],
             registro["estoque_ideal"]
         )
@@ -394,12 +399,13 @@ def registrar_perda():
     finally:
         conexao.close()
 
+
 # histórico de movimentações
 
 def consultar_movimentacoes():
     print("\n--- HISTÓRICO DE MOVIMENTAÇÕES ---")
     print("1 - Todas as movimentações")
-    print("2 - Filtrar por tipo (entrada, venda, perda, ajuste)")
+    print("2 - Filtrar por tipo (entrada, saida_venda, perda, ajuste, estorno)")
     print("3 - Filtrar por ingrediente")
     filtro = input("Escolha uma opção [ENTER para todas]: ").strip()
 
@@ -408,7 +414,7 @@ def consultar_movimentacoes():
         cursor = conexao.cursor()
 
         query_base = """
-            SELECT 
+            SELECT
                 m.id,
                 m.data_hora,
                 e.ingrediente,
@@ -421,7 +427,7 @@ def consultar_movimentacoes():
         """
 
         if filtro == "2":
-            print("\nTipos disponíveis: entrada | saida_venda | perda | ajuste")
+            print("\nTipos disponíveis: entrada | saida_venda | perda | ajuste | estorno")
             tipo_escolhido = input("Digite o tipo desejado: ").strip().lower()
             cursor.execute(
                 query_base + " WHERE m.tipo = ? ORDER BY m.data_hora DESC, m.id DESC",
@@ -465,7 +471,8 @@ def consultar_movimentacoes():
         "entrada": "Entrada",
         "saida_venda": "Saída (Venda)",
         "perda": "Perda",
-        "ajuste": "Ajuste"
+        "ajuste": "Ajuste",
+        "estorno": "Estorno (Cancelamento)"
     }
 
     for mov in movimentacoes:
@@ -475,6 +482,7 @@ def consultar_movimentacoes():
         valor_formatado = f"R$ {mov['custo_total']:.2f}"
 
         print(f"{codigo} | {mov['data_hora']} | {mov['ingrediente']} | {tipo_formatado} | {quantidade_formatada} | {valor_formatado}")
+
 
 # desativar ingrediente
 
@@ -542,106 +550,10 @@ def desativar_ingrediente():
     finally:
         conexao.close()
 
+
 # lista de reposição
 
 def lista_reposicao():
-    conexao = conectar()
-    try:
-        cursor = conexao.cursor()
-
-        cursor.execute("""
-            SELECT id, ingrediente, unidade, quantidade,
-                   custo_unitario, estoque_minimo, estoque_ideal
-            FROM estoque
-            ORDER BY ingrediente ASC
-        """)
-
-        ingredientes = cursor.fetchall()
-
-    finally:
-        conexao.close()
-
-    if not ingredientes:
-        print("Nenhum ingrediente cadastrado.")
-        return
-
-    reposicoes = []
-
-    for registro in ingredientes:
-        id_ingrediente = registro["id"]
-        ingrediente = registro["ingrediente"]
-        unidade = registro["unidade"]
-        quantidade = registro["quantidade"]
-        custo_unitario = registro["custo_unitario"]
-        estoque_minimo = registro["estoque_minimo"]
-        estoque_ideal = registro["estoque_ideal"]
-
-        if quantidade >= estoque_ideal:
-            continue
-
-        quantidade_reposicao = estoque_ideal - quantidade
-        custo_reposicao = quantidade_reposicao * custo_unitario
-
-        status = calcular_status_estoque(
-            quantidade, estoque_minimo, estoque_ideal
-        )
-
-        reposicoes.append({
-            "id": id_ingrediente,
-            "ingrediente": ingrediente,
-            "unidade": unidade,
-            "quantidade": quantidade,
-            "estoque_ideal": estoque_ideal,
-            "quantidade_reposicao": quantidade_reposicao,
-            "custo_unitario": custo_unitario,
-            "custo_reposicao": custo_reposicao,
-            "status": status
-        })
-
-    if not reposicoes:
-        print("Nenhum ingrediente necessita de reposição.")
-        return
-
-    ordem_prioridade = {
-        "Fora de estoque": 1,
-        "Estoque crítico": 2,
-        "Estoque baixo": 3,
-        "Estoque médio": 4
-    }
-
-    reposicoes.sort(
-        key=lambda item: ordem_prioridade[item["status"]]
-    )
-
-    custo_total = 0
-
-    for item in reposicoes:
-        custo_total += item["custo_reposicao"]
-
-    print("\n========== LISTA DE REPOSIÇÃO ==========")
-    print("ID | Ingrediente | Status | Atual | Ideal | Repor | Custo Unit. | Custo Reposição")
-
-    for item in reposicoes:
-        codigo = f"#ING{item['id']:03d}"
-        ingrediente = item["ingrediente"].capitalize()
-        unidade = item["unidade"]
-        status = item["status"]
-
-        atual = f"{item['quantidade']:g} {unidade}"
-        ideal = f"{item['estoque_ideal']:g} {unidade}"
-        repor = f"{item['quantidade_reposicao']:g} {unidade}"
-
-        preco_unitario = f"R$ {item['custo_unitario']:.2f}/{unidade}"
-        preco_total = f"R$ {item['custo_reposicao']:.2f}"
-
-        print(f"{codigo} | {ingrediente} | {status} | {atual} | {ideal} | {repor} | {preco_unitario} | {preco_total}")
-
-    print("\n========================================")
-    print(f"Ingredientes a repor: {len(reposicoes)}")
-    print(f"Custo total estimado: R$ {custo_total:.2f}")
-    print("========================================") 
-            
-
     print("\n--- LISTA DE REPOSIÇÃO / COMPRAS ---")
     print("1 - Todos os itens abaixo do estoque ideal")
     print("2 - Apenas itens urgentes (Fora de estoque ou Crítico)")
@@ -663,7 +575,8 @@ def lista_reposicao():
                    custo_unitario, estoque_minimo, estoque_ideal
             FROM estoque
             WHERE {condicao}
-            ORDER BY (quantidade / estoque_ideal) ASC, ingrediente ASC
+            ORDER BY CASE WHEN estoque_ideal > 0 THEN (quantidade * 1.0 / estoque_ideal) ELSE 0 END ASC,
+                     ingrediente ASC
         """)
         itens = cursor.fetchall()
     finally:
@@ -684,7 +597,7 @@ def lista_reposicao():
         quantidade_atual = item["quantidade"]
         quantidade_ideal = item["estoque_ideal"]
 
-        quantidade_repor = round(quantidade_ideal - quantidade_atual, 3)
+        quantidade_repor = round(max(0.0, quantidade_ideal - quantidade_atual), 3)
         custo_estimado = round(quantidade_repor * item["custo_unitario"], 2)
         custo_total_geral += custo_estimado
 
@@ -695,10 +608,11 @@ def lista_reposicao():
         comprar_fmt = f"{quantidade_repor:g} {unidade}"
         custo_fmt = f"R$ {custo_estimado:.2f}"
 
-        print(f"{codigo} | {item['ingrediente']} | {atual_fmt} | {ideal_fmt} | {comprar_fmt} | {status} | {custo_fmt}")
+        print(f"{codigo} | {item['ingrediente'].capitalize()} | {atual_fmt} | {ideal_fmt} | {comprar_fmt} | {status} | {custo_fmt}")
 
     print("-" * 75)
     print(f"Total de itens para compra: {len(itens)} | Orçamento estimado: R$ {custo_total_geral:.2f}")
+
 
 def menu_estoque():
     while True:
