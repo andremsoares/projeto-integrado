@@ -1,5 +1,6 @@
 import sqlite3
 import math
+import random
 from datetime import datetime
 from banco import conectar
 from setores.telas.receitas import (
@@ -18,30 +19,30 @@ def consultar_cardapio():
 
     if not cardapio:
         print("Nenhum produto ativo disponível no cardápio.")
-        return False
+        return []
 
     print("\n--- CARDÁPIO DISPONÍVEL ---")
     for item in cardapio:
         status = f"{item['disponivel']} un" if item["disponivel"] > 0 else "ESGOTADO"
         print(f"ID {item['id']} | {item['nome']} ({item['categoria']}) - R$ {item['preco']:.2f} | Disponível: {status}")
 
-    return True
+    return cardapio
 
 
 # validar pedido
 
-def validar_pedido(cliente, produto_id, quantidade,
-                   forma_pagamento, tipo_entrega,
-                   bairro, taxa_entrega):
-
+def validar_pedido(cliente, itens, forma_pagamento, tipo_entrega, bairro, taxa_entrega):
     if not cliente:
         raise ValueError("Informe o nome do cliente.")
 
-    if produto_id <= 0:
-        raise ValueError("ID do produto inválido.")
+    if not itens:
+        raise ValueError("Adicione pelo menos um produto ao pedido.")
 
-    if quantidade <= 0:
-        raise ValueError("A quantidade deve ser maior que zero.")
+    for produto_id, quantidade in itens:
+        if produto_id <= 0:
+            raise ValueError("ID do produto inválido.")
+        if quantidade <= 0:
+            raise ValueError("A quantidade de cada produto deve ser maior que zero.")
 
     if forma_pagamento not in ("pix", "dinheiro", "crédito", "débito"):
         raise ValueError("Forma de pagamento inválida.")
@@ -63,65 +64,75 @@ def validar_pedido(cliente, produto_id, quantidade,
 
 # calcular valor do pedido
 
-def calcular_valor_pedido(preco, quantidade, taxa_entrega=0):
-    subtotal = preco * quantidade
-    valor_total = subtotal + taxa_entrega
-    return round(valor_total, 2)
+def calcular_valor_pedido(subtotal, taxa_entrega=0):
+    return round(subtotal + taxa_entrega, 2)
 
 
-# aprovar pedido
+# aprovar pedido (com múltiplos produtos)
 
-def aprovar_pedido(cliente, produto_id, quantidade,
-                   forma_pagamento, tipo_entrega,
-                   bairro, taxa_entrega):
-
+def aprovar_pedido(cliente, itens, forma_pagamento, tipo_entrega, bairro, taxa_entrega):
     conexao = conectar()
 
     try:
         cursor = conexao.cursor()
-
-        # Iniciar transação atômica
         cursor.execute("BEGIN IMMEDIATE")
 
-        cursor.execute("""
-            SELECT id, nome, categoria, preco
-            FROM produtos
-            WHERE id = ?
-            AND ativo = 1
-        """, (produto_id,))
-
-        produto = cursor.fetchone()
-
-        if not produto:
-            print("Produto não encontrado ou inativo.")
-            conexao.rollback()
-            return False
-
-        # Motor de receitas usando o mesmo cursor da transação
-        disponivel, mensagem = verificar_disponibilidade(
-            produto_id, quantidade, cursor=cursor
-        )
-
-        if not disponivel:
-            print("\n========== PEDIDO RECUSADO ==========")
-            print(f"Motivo: {mensagem}")
-            conexao.rollback()
-            return False
-
-        valor_total = calcular_valor_pedido(
-            produto["preco"], quantidade, taxa_entrega
-        )
-
-        custo_unitario = calcular_custo_receita(produto_id, cursor=cursor)
-        custo_total = round(custo_unitario * quantidade, 2)
+        # Agrupa produtos repetidos no mesmo pedido
+        itens_agrupados = {}
+        for produto_id, quantidade in itens:
+            itens_agrupados[produto_id] = itens_agrupados.get(produto_id, 0) + quantidade
 
         data_hora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        itens_processados = []
+        subtotal = 0.0
+        custo_total = 0.0
+
+        # Valida disponibilidade e consome estoque item a item dentro da transação
+        for produto_id, quantidade in itens_agrupados.items():
+            cursor.execute("""
+                SELECT id, nome, categoria, preco
+                FROM produtos
+                WHERE id = ?
+                  AND ativo = 1
+            """, (produto_id,))
+            produto = cursor.fetchone()
+
+            if not produto:
+                print(f"Produto ID {produto_id} não encontrado ou inativo.")
+                conexao.rollback()
+                return False
+
+            disponivel, mensagem = verificar_disponibilidade(
+                produto_id, quantidade, cursor=cursor
+            )
+
+            if not disponivel:
+                print("\n========== PEDIDO RECUSADO ==========")
+                print(f"Produto: {produto['nome']} ({quantidade}x)")
+                print(f"Motivo: {mensagem}")
+                conexao.rollback()
+                return False
+
+            consumir_estoque_receita(cursor, produto_id, quantidade, data_hora)
+
+            custo_unitario = calcular_custo_receita(produto_id, cursor=cursor)
+            subtotal += produto["preco"] * quantidade
+            custo_total += custo_unitario * quantidade
+
+            itens_processados.append({
+                "produto_id": produto_id,
+                "nome": produto["nome"],
+                "quantidade": quantidade,
+                "preco_unitario": produto["preco"],
+                "custo_unitario": custo_unitario
+            })
+
+        valor_total = calcular_valor_pedido(subtotal, taxa_entrega)
+        custo_total = round(custo_total, 2)
 
         cursor.execute("""
             INSERT INTO pedidos (
                 cliente,
-                produto_id,
-                quantidade,
                 valor_total,
                 custo_total,
                 forma_pagamento,
@@ -129,13 +140,12 @@ def aprovar_pedido(cliente, produto_id, quantidade,
                 bairro,
                 taxa_entrega,
                 status,
+                codigo_confirmacao,
                 data_hora
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             cliente,
-            produto_id,
-            quantidade,
             valor_total,
             custo_total,
             forma_pagamento,
@@ -143,26 +153,39 @@ def aprovar_pedido(cliente, produto_id, quantidade,
             bairro,
             taxa_entrega,
             "aprovado",
+            None,
             data_hora
         ))
 
         pedido_id = cursor.lastrowid
 
-        consumir_estoque_receita(
-            cursor,
-            produto_id,
-            quantidade,
-            data_hora
-        )
+        for item in itens_processados:
+            cursor.execute("""
+                INSERT INTO itens_pedido (
+                    pedido_id,
+                    produto_id,
+                    quantidade,
+                    preco_unitario,
+                    custo_unitario
+                )
+                VALUES (?, ?, ?, ?, ?)
+            """, (
+                pedido_id,
+                item["produto_id"],
+                item["quantidade"],
+                item["preco_unitario"],
+                item["custo_unitario"]
+            ))
 
         conexao.commit()
 
         print("\n========== PEDIDO APROVADO ==========")
         print(f"ID: #PED{pedido_id:03d}")
         print(f"Cliente: {cliente}")
-        print(f"Produto: {produto['nome']}")
-        print(f"Categoria: {produto['categoria']}")
-        print(f"Quantidade: {quantidade}")
+        print("Itens:")
+        for item in itens_processados:
+            total_item = item["preco_unitario"] * item["quantidade"]
+            print(f"  - {item['quantidade']}x {item['nome']} (R$ {total_item:.2f})")
         print(f"Valor total: R$ {valor_total:.2f}")
         print(f"Custo de produção: R$ {custo_total:.2f}")
         print(f"Pagamento: {forma_pagamento}")
@@ -191,46 +214,36 @@ def listar_pedidos(apenas_ativos=True):
         cursor = conexao.cursor()
 
         if apenas_ativos:
-            cursor.execute("""
-                SELECT p.id,
-                       p.cliente,
-                       pr.nome AS produto_nome,
-                       p.quantidade,
-                       p.valor_total,
-                       p.forma_pagamento,
-                       p.tipo_entrega,
-                       p.bairro,
-                       p.status,
-                       p.data_hora
-                FROM pedidos p
-                INNER JOIN produtos pr ON p.produto_id = pr.id
-                WHERE p.status IN ('aprovado', 'em preparo', 'saiu para entrega')
-                ORDER BY p.id ASC
-            """)
+            status_filtro = "('aprovado', 'em preparo', 'saiu para entrega')"
+            ordem = "ORDER BY p.id ASC"
         else:
-            cursor.execute("""
-                SELECT p.id,
-                       p.cliente,
-                       pr.nome AS produto_nome,
-                       p.quantidade,
-                       p.valor_total,
-                       p.forma_pagamento,
-                       p.tipo_entrega,
-                       p.bairro,
-                       p.status,
-                       p.data_hora
-                FROM pedidos p
-                INNER JOIN produtos pr ON p.produto_id = pr.id
-                WHERE p.status IN ('concluido', 'cancelado')
-                ORDER BY p.id DESC
-            """)
+            status_filtro = "('concluido', 'cancelado')"
+            ordem = "ORDER BY p.id DESC"
+
+        cursor.execute(f"""
+            SELECT p.id,
+                   p.cliente,
+                   GROUP_CONCAT(ip.quantidade || 'x ' || pr.nome, ', ') AS itens_resumo,
+                   p.valor_total,
+                   p.forma_pagamento,
+                   p.tipo_entrega,
+                   p.bairro,
+                   p.status,
+                   p.data_hora
+            FROM pedidos p
+            INNER JOIN itens_pedido ip ON p.id = ip.pedido_id
+            INNER JOIN produtos pr ON ip.produto_id = pr.id
+            WHERE p.status IN {status_filtro}
+            GROUP BY p.id
+            {ordem}
+        """)
 
         return cursor.fetchall()
     finally:
         conexao.close()
 
 
-# avançar status do pedido
+# avançar status na cozinha
 
 def avancar_status_motor(pedido_id):
     conexao = conectar()
@@ -252,9 +265,18 @@ def avancar_status_motor(pedido_id):
         if status_atual == "aprovado":
             novo_status = "em preparo"
         elif status_atual == "em preparo":
-            novo_status = "saiu para entrega" if tipo_entrega == "entrega" else "concluido"
+            if tipo_entrega == "retirada":
+                novo_status = "concluido"
+            else:
+                return False, (
+                    "Este pedido é de entrega e já está em preparo. "
+                    "A liberação e a conclusão devem ser feitas na aba Delivery."
+                )
         elif status_atual == "saiu para entrega":
-            novo_status = "concluido"
+            return False, (
+                "Este pedido já está em rota. "
+                "A conclusão com código deve ser feita na aba Delivery."
+            )
         else:
             return False, f"Pedido já está '{status_atual}' e não pode avançar."
 
@@ -274,7 +296,94 @@ def avancar_status_motor(pedido_id):
         conexao.close()
 
 
-# cancelar pedido com estorno condicional
+# motor delivery: aprovar saída para entrega e gerar código do cliente
+
+def liberar_entrega_motor(pedido_id):
+    conexao = conectar()
+    try:
+        cursor = conexao.cursor()
+        cursor.execute("""
+            SELECT status, tipo_entrega
+            FROM pedidos
+            WHERE id = ?
+        """, (pedido_id,))
+        pedido = cursor.fetchone()
+
+        if not pedido:
+            return False, "Pedido não encontrado."
+
+        if pedido["tipo_entrega"] != "entrega":
+            return False, "Este pedido é de retirada e não pertence ao Delivery."
+
+        if pedido["status"] != "em preparo":
+            return False, (
+                f"Não é possível liberar este pedido (status atual: '{pedido['status']}'). "
+                "Ele precisa estar 'em preparo'."
+            )
+
+        codigo = f"{random.randint(1000, 9999)}"
+
+        cursor.execute("""
+            UPDATE pedidos
+            SET status = 'saiu para entrega',
+                codigo_confirmacao = ?
+            WHERE id = ?
+        """, (codigo, pedido_id))
+        conexao.commit()
+
+        return True, codigo
+
+    except sqlite3.Error as erro:
+        conexao.rollback()
+        return False, f"Erro no banco de dados: {erro}"
+    finally:
+        conexao.close()
+
+
+# motor delivery: concluir entrega validando o código do cliente
+
+def concluir_entrega_com_codigo_motor(pedido_id, codigo_informado):
+    conexao = conectar()
+    try:
+        cursor = conexao.cursor()
+        cursor.execute("""
+            SELECT status, tipo_entrega, codigo_confirmacao
+            FROM pedidos
+            WHERE id = ?
+        """, (pedido_id,))
+        pedido = cursor.fetchone()
+
+        if not pedido:
+            return False, "Pedido não encontrado."
+
+        if pedido["tipo_entrega"] != "entrega":
+            return False, "Este pedido é de retirada e não pertence ao Delivery."
+
+        if pedido["status"] != "saiu para entrega":
+            return False, (
+                f"Este pedido está '{pedido['status']}' e não está aguardando confirmação de entrega."
+            )
+
+        if not codigo_informado or codigo_informado.strip() != pedido["codigo_confirmacao"]:
+            return False, "Código de confirmação incorreto! Entrega não concluída."
+
+        cursor.execute("""
+            UPDATE pedidos
+            SET status = 'concluido'
+            WHERE id = ?
+        """, (pedido_id,))
+        conexao.commit()
+
+        return True, "concluido"
+
+    except sqlite3.Error as erro:
+        conexao.rollback()
+        return False, f"Erro no banco de dados: {erro}"
+    finally:
+        conexao.close()
+
+
+# cancelar pedido com estorno condicional de todos os itens
 
 def cancelar_pedido_motor(pedido_id):
     conexao = conectar()
@@ -283,7 +392,7 @@ def cancelar_pedido_motor(pedido_id):
         cursor.execute("BEGIN IMMEDIATE")
 
         cursor.execute("""
-            SELECT produto_id, quantidade, status
+            SELECT status
             FROM pedidos
             WHERE id = ?
         """, (pedido_id,))
@@ -306,14 +415,22 @@ def cancelar_pedido_motor(pedido_id):
         """, (pedido_id,))
 
         if status_atual == "aprovado":
+            cursor.execute("""
+                SELECT produto_id, quantidade
+                FROM itens_pedido
+                WHERE pedido_id = ?
+            """, (pedido_id,))
+            itens = cursor.fetchall()
+
             data_hora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            estornar_estoque_receita(
-                cursor,
-                pedido["produto_id"],
-                pedido["quantidade"],
-                data_hora
-            )
-            mensagem = "Pedido cancelado e insumos devolvidos ao estoque."
+            for item in itens:
+                estornar_estoque_receita(
+                    cursor,
+                    item["produto_id"],
+                    item["quantidade"],
+                    data_hora
+                )
+            mensagem = "Pedido cancelado e insumos de todos os itens devolvidos ao estoque."
         else:
             mensagem = (
                 f"Pedido cancelado (estava '{status_atual}'). "
@@ -330,18 +447,57 @@ def cancelar_pedido_motor(pedido_id):
         conexao.close()
 
 
-# registrar novo pedido
+# registrar novo pedido (com vários produtos)
 
 def registrar_pedido():
     print("\n========== REGISTRAR PEDIDO ==========")
 
     try:
-        if not consultar_cardapio():
+        cardapio = consultar_cardapio()
+        if not cardapio:
             return False
 
+        mapa_produtos = {item["id"]: item for item in cardapio}
+
         cliente = input("\nNome do cliente: ").strip()
-        produto_id = int(input("ID numérico do produto: ").strip())
-        quantidade = int(input("Quantidade: ").strip())
+        if not cliente:
+            print("Dados inválidos: Informe o nome do cliente.")
+            return False
+
+        itens = []
+        while True:
+            try:
+                produto_id = int(input("\nID numérico do produto (ou 0 para encerrar seleção): ").strip())
+            except ValueError:
+                print("Digite um número de ID válido.")
+                continue
+
+            if produto_id == 0:
+                if itens:
+                    break
+                print("Operação cancelada (nenhum produto adicionado).")
+                return False
+
+            if produto_id not in mapa_produtos:
+                print("Produto não encontrado no cardápio ativo. Tente novamente.")
+                continue
+
+            try:
+                quantidade = int(input(f"Quantidade de '{mapa_produtos[produto_id]['nome']}': ").strip())
+            except ValueError:
+                print("Digite uma quantidade válida.")
+                continue
+
+            if quantidade <= 0:
+                print("A quantidade deve ser maior que zero.")
+                continue
+
+            itens.append((produto_id, quantidade))
+            print(f"Adicionado ao pedido: {quantidade}x {mapa_produtos[produto_id]['nome']}")
+
+            continuar = input("Deseja adicionar outro produto a este pedido? (S/N): ").strip().upper()
+            if continuar != "S":
+                break
 
         print("\nFormas de pagamento:")
         print("Pix | Dinheiro | Crédito | Débito")
@@ -373,8 +529,7 @@ def registrar_pedido():
 
         validar_pedido(
             cliente,
-            produto_id,
-            quantidade,
+            itens,
             forma_pagamento,
             tipo_entrega,
             bairro,
@@ -385,8 +540,7 @@ def registrar_pedido():
 
         return aprovar_pedido(
             cliente,
-            produto_id,
-            quantidade,
+            itens,
             forma_pagamento,
             tipo_entrega,
             bairro,
@@ -402,7 +556,7 @@ def registrar_pedido():
         return False
 
 
-# função auxiliar de exibição para reaproveitar nas telas
+# função auxiliar de exibição
 
 def exibir_lista_pedidos(pedidos):
     for pedido in pedidos:
@@ -413,7 +567,7 @@ def exibir_lista_pedidos(pedidos):
         )
         print(
             f"ID {pedido['id']} (#PED{pedido['id']:03d}) | {pedido['status'].upper()} | "
-            f"{pedido['cliente']} | {pedido['quantidade']}x {pedido['produto_nome']} | "
+            f"{pedido['cliente']} | {pedido['itens_resumo']} | "
             f"R$ {pedido['valor_total']:.2f} ({pedido['forma_pagamento']}) | "
             f"{entrega} | {pedido['data_hora']}"
         )
@@ -446,7 +600,7 @@ def consultar_pedidos():
         print("Opção inválida.")
 
 
-# avançar status do pedido
+# avançar status do pedido (cozinha)
 
 def avancar_status_pedido():
     print("\n========== AVANÇAR STATUS DO PEDIDO ==========")

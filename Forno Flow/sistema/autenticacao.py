@@ -142,15 +142,46 @@ def configurar_primeiro_acesso():
 
 def autenticar():
     print("\n--- LOGIN NO SISTEMA ---")
+    usuarios = listar_usuarios_acesso()
+    mapa_usuarios = {u["tipo"]: u for u in usuarios}
+
     tentativas = 0
     limite = 3
 
     while tentativas < limite:
-        usuario = input("Digite o usuário: ").strip().lower()
-        login_senha = input("Digite sua senha para entrar: ").strip()
+        print("\n+-------+--------------+--------------------+")
+        print("| Opção | Perfil       | Status             |")
+        print("+-------+--------------+--------------------+")
+        for u in usuarios:
+            status = "Ativo" if u["configurada"] == 1 else "Bloqueado"
+            print(f"|   {u['tipo']}   | {u['usuario'].capitalize():<12} | {status:<18} |")
+        print("+-------+--------------+--------------------+")
+
+        opcao = input("Escolha o número do perfil: ").strip()
+
+        try:
+            tipo_escolhido = int(opcao)
+        except ValueError:
+            print("Opção inválida. Digite apenas o número correspondente ao perfil.")
+            continue
+
+        if tipo_escolhido not in mapa_usuarios:
+            print("Perfil não encontrado. Escolha uma das opções da tabela.")
+            continue
+
+        perfil = mapa_usuarios[tipo_escolhido]
+
+        if perfil["configurada"] == 0:
+            print(
+                f"A senha da área '{perfil['usuario']}' ainda não foi criada. "
+                "Solicite ao gerente para liberar o acesso."
+            )
+            continue
+
+        login_senha = input(f"Digite a senha de '{perfil['usuario'].capitalize()}': ").strip()
         tentativas += 1
 
-        registro, mensagem = autenticar_motor(usuario, login_senha)
+        registro, mensagem = autenticar_motor(perfil["usuario"], login_senha)
 
         if registro is None:
             print(mensagem)
@@ -160,10 +191,9 @@ def autenticar():
                 print("Número máximo de tentativas atingido. Acesso negado.")
             continue
 
-        print(f"\nBem-vindo(a) ao sistema, {registro['usuario']}!")
+        print(f"\nBem-vindo(a) ao sistema, {registro['usuario'].capitalize()}!")
         return registro
-        
-    conexao.close()
+
     return None
 
 def gerenciar_senhas():

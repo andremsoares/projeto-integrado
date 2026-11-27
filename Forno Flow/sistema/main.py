@@ -9,6 +9,7 @@ from autenticacao import (
 from banco import inicializar_banco
 from setores.gerente import menu_gerente
 from setores.cozinha import menu_cozinha
+from setores.delivery import menu_delivery
 
 
 def main():
@@ -46,7 +47,7 @@ def main():
             case 3:
                 print("Financeiro (em desenvolvimento)")
             case 4:
-                print("Delivery (em desenvolvimento)")
+                menu_delivery()
             case _:
                 print("Tipo desconhecido")
 

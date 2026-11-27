@@ -97,23 +97,32 @@ def inicializar_banco():
             # 5. Tabela de Pedidos (vendas, financeiro e delivery)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS pedidos (
-                    id INTEGER PRIMARY KEY,
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
                     cliente TEXT NOT NULL,
-                    produto_id INTEGER NOT NULL,
-                    quantidade INTEGER NOT NULL DEFAULT 1 CHECK (quantidade > 0),
-                    valor_total REAL NOT NULL CHECK (valor_total >= 0),
-                    custo_total REAL NOT NULL CHECK (custo_total >= 0),
+                    valor_total REAL NOT NULL,
+                    custo_total REAL NOT NULL,
                     forma_pagamento TEXT NOT NULL,
                     tipo_entrega TEXT NOT NULL,
                     bairro TEXT,
-                    taxa_entrega REAL NOT NULL DEFAULT 0 CHECK (taxa_entrega >= 0),
-                    status TEXT NOT NULL DEFAULT 'aprovado'
-                        CHECK (status IN ('aprovado', 'em preparo', 'saiu para entrega', 'concluido', 'cancelado')),
-                    data_hora TEXT NOT NULL,
-                    FOREIGN KEY (produto_id) REFERENCES produtos(id)
+                    taxa_entrega REAL NOT NULL DEFAULT 0,
+                    status TEXT NOT NULL,
+                    codigo_confirmacao TEXT,
+                    data_hora TEXT NOT NULL
                 )
             """)
 
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS itens_pedido (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    pedido_id INTEGER NOT NULL,
+                    produto_id INTEGER NOT NULL,
+                    quantidade INTEGER NOT NULL,
+                    preco_unitario REAL NOT NULL,
+                    custo_unitario REAL NOT NULL,
+                    FOREIGN KEY (pedido_id) REFERENCES pedidos(id),
+                    FOREIGN KEY (produto_id) REFERENCES produtos(id)
+                )
+            """)
             # 6. Tabela de Movimentações de Estoque (histórico de compras, saídas, perdas e ajustes)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS movimentacoes_estoque (
