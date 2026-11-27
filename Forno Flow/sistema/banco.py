@@ -25,21 +25,19 @@ def inicializar_banco():
                     id INTEGER PRIMARY KEY,
                     usuario TEXT NOT NULL UNIQUE,
                     tipo INTEGER NOT NULL CHECK (tipo IN (1, 2, 3, 4)),
-                    senha_hash TEXT NOT NULL
+                    senha_hash TEXT
                 )
             """)
-
-            senha_padrao = gerar_hash("1234")
             cursor.executemany(
                 """
                 INSERT OR IGNORE INTO acessos (usuario, tipo, senha_hash)
                 VALUES (?, ?, ?)
                 """,
                 [
-                    ("gerente", 1, senha_padrao),
-                    ("cozinha", 2, senha_padrao),
-                    ("financeiro", 3, senha_padrao),
-                    ("delivery", 4, senha_padrao),
+                    ("gerente", 1, None),
+                    ("cozinha", 2, None),
+                    ("financeiro", 3, None),
+                    ("delivery", 4, None),
                 ],
             )
 

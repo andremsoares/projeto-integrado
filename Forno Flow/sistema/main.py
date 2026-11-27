@@ -1,30 +1,55 @@
 import sys
 sys.dont_write_bytecode = True
-from autenticacao import autenticar
+
+from autenticacao import (
+    autenticar,
+    gerente_configurado,
+    configurar_primeiro_acesso
+)
 from banco import inicializar_banco
+from setores.gerente import menu_gerente
 from setores.cozinha import menu_cozinha
 
-print("Bem-vindo(a) ao sistema de gerenciamento do Forno Flow!")
-input("Pressione ENTER para continuar...")
 
-inicializar_banco()
+def main():
+    print("Bem-vindo(a) ao sistema de gerenciamento do Forno Flow!")
+    inicializar_banco()
 
-registro = autenticar()
+    if not gerente_configurado():
+        configurar_primeiro_acesso()
 
-if registro is None:
-    sys.exit("Acesso negado. Encerrando aplicação.")
-# verificar qual o tipo de usuario
-# exibir telas para o tipo especifico
-tipo = registro["tipo"]
+    while True:
+        print("\n========== FORNO FLOW ==========")
+        print("1 - Fazer login")
+        print("0 - Encerrar sistema")
+        opcao = input("Escolha uma opção: ").strip()
 
-match tipo:
-    case 1:
-        print("Gerente")
-    case 2:
-        menu_cozinha()
-    case 3:
-        print("Financeiro")
-    case 4:
-        print("Delivery")
-    case _:
-        print("Tipo desconhecido")
+        if opcao == "0":
+            print("Encerrando aplicação...")
+            break
+        elif opcao != "1":
+            print("Opção inválida.")
+            continue
+
+        registro = autenticar()
+
+        if registro is None:
+            sys.exit("Acesso negado. Encerrando aplicação.")
+
+        tipo = registro["tipo"]
+
+        match tipo:
+            case 1:
+                menu_gerente()
+            case 2:
+                menu_cozinha()
+            case 3:
+                print("Financeiro (em desenvolvimento)")
+            case 4:
+                print("Delivery (em desenvolvimento)")
+            case _:
+                print("Tipo desconhecido")
+
+
+if __name__ == "__main__":
+    main()
